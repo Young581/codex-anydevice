@@ -13,17 +13,22 @@ CONFIG = ROOT / '.github' / 'repository-settings.json'
 
 
 def session(account):
-    result = subprocess.run(
-        ['git', '-c', 'credential.interactive=never', 'credential', 'fill'],
-        input='protocol=https\nhost=github.com\nusername=' + account + '\n\n',
-        text=True, encoding='utf-8', capture_output=True, timeout=30)
-    if result.returncode:
-        raise RuntimeError('No cached GitHub login is available; sign in using Git Credential Manager.')
-    fields = dict(line.split('=', 1) for line in result.stdout.splitlines() if '=' in line)
-    token = fields.get('password')
-    if not token:
-        raise RuntimeError('Git Credential Manager returned no usable session.')
-    return token
+    # Some GCM caches only match the default lookup rather than an explicit username.
+    for username in (account, None):
+        query = 'protocol=https\nhost=github.com\n'
+        if username:
+            query += 'username=' + username + '\n'
+        result = subprocess.run(
+            ['git', '-c', 'credential.interactive=never', 'credential', 'fill'],
+            input=query + '\n', cwd=str(ROOT), text=True, encoding='utf-8',
+            capture_output=True, timeout=30)
+        if result.returncode:
+            continue
+        fields = dict(line.split('=', 1) for line in result.stdout.splitlines() if '=' in line)
+        token = fields.get('password')
+        if token and request(token, '/user')['login'].lower() == account.lower():
+            return token
+    raise RuntimeError('No cached GitHub login for the declared owner is available; sign in using Git Credential Manager.')
 
 
 def request(token, endpoint, method='GET', body=None):
@@ -78,8 +83,6 @@ def main():
     if config['repository'] != 'Young581/codex-anydevice':
         raise RuntimeError('This tool is scoped to Young581/codex-anydevice.')
     token = session(account)
-    if request(token, '/user')['login'].lower() != account.lower():
-        raise RuntimeError('Authenticated GitHub account does not match the declared owner.')
     base = '/repos/' + config['repository']
     repo = request(token, base)
     if args.create:

@@ -12,7 +12,8 @@ const { host } = require('./helpers');
 const appId = '123456789'; const senderId = 'synthetic_sender_12345'; const secret = 'synthetic-qq-secret-for-tests';
 
 function fixture(t) {
-  const projectPath = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'anydevice-setup-')));
+  // Match fs.promises.realpath used by project selection, including Windows 8.3 aliases.
+  const projectPath = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'anydevice-setup-')));
   t.after(() => fs.rmSync(projectPath, { recursive: true, force: true }));
   const instance = host('zh-cn'); const controller = new SetupController(instance.api, instance.context);
   return { ...instance, controller, project: { name: 'Synthetic <project>', path: projectPath } };
@@ -64,7 +65,10 @@ test('configuration enforces one sender, disables groups and uses a SecretRef', 
   await f.controller.open(); await f.controller.refresh(); const model = f.messages.at(-1).model;
   assert.equal(model.complete, true); assert.doesNotMatch(JSON.stringify(model), new RegExp(secret));
   assert.equal(model.appId, undefined); assert.equal(model.senderId, undefined); assert.equal(model.environment, undefined);
-  await f.controller.act('copyBind'); assert.equal(f.calls.find((call) => call[0] === 'clipboard')[1], bindCommand(f.project));
+  await f.controller.act('copyBind');
+  const copied = f.calls.find((call) => call[0] === 'clipboard');
+  assert.ok(copied, f.controller.notice);
+  assert.equal(copied[1], bindCommand(f.project));
 });
 
 test('deleted project cannot produce a usable binding', async (t) => {
