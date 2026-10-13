@@ -1,0 +1,32 @@
+{
+  "name": "codex-anydevice",
+  "displayName": "Codex AnyDevice",
+  "description": "Foundation for controlling local Codex work from a phone through QQ, WeChat and OpenClaw.",
+  "version": "0.1.0",
+  "publisher": "Young581",
+  "license": "MIT",
+  "preview": true,
+  "engines": { "vscode": "^1.96.0", "node": ">=22" },
+  "categories": ["Other"],
+  "keywords": ["codex", "mobile", "qq", "wechat", "openclaw"],
+  "repository": { "type": "git", "url": "https://github.com/Young581/codex-anydevice.git" },
+  "homepage": "https://github.com/Young581/codex-anydevice#readme",
+  "bugs": { "url": "https://github.com/Young581/codex-anydevice/issues" },
+  "main": "./extension/extension.js",
+  "extensionKind": ["workspace"],
+  "capabilities": {
+    "untrustedWorkspaces": { "supported": false },
+    "virtualWorkspaces": { "supported": false }
+  },
+  "contributes": {
+    "commands": [
+      { "command": "codexAnyDevice.openResearch", "title": "%command.openResearch%", "category": "Codex AnyDevice" },
+      { "command": "codexAnyDevice.showStatus", "title": "%command.showStatus%", "category": "Codex AnyDevice" }
+    ]
+  },
+  "scripts": {
+    "check": "node scripts/check.js",
+    "test": "node --test tests/extension.test.js",
+    "package": "python -B build.py --output dist"
+  }
+}

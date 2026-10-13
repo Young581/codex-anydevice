@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 使用与开发说明 / User and development guide
+    url: https://github.com/Young581/codex-anydevice/blob/main/README.md
+    about: 查看当前开发状态与验收范围 / Check implemented and planned functionality
+  - name: 隐私与安全 / Privacy and security
+    url: https://github.com/Young581/codex-anydevice/blob/main/SECURITY.md
+    about: 请勿公开敏感信息 / Do not disclose sensitive information publicly
