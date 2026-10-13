@@ -1,0 +1,63 @@
+'use strict';
+
+const vscode = require('vscode');
+const assert = require('node:assert/strict');
+const fs = require('node:fs/promises');
+const path = require('node:path');
+
+async function run() {
+  const extension = vscode.extensions.getExtension('Young581.codex-anydevice');
+  assert.ok(extension, 'Extension is installed in the isolated host');
+  assert.equal(extension.packageJSON.version, '0.2.0');
+  if (process.env.ANYDEVICE_HOST_EXPECT_EXTENSION_PATH) {
+    assert.equal(await fs.realpath(extension.extensionPath),
+      await fs.realpath(process.env.ANYDEVICE_HOST_EXPECT_EXTENSION_PATH));
+  }
+  const api = await extension.activate();
+  const controller = api.controller;
+  const commands = await vscode.commands.getCommands(true);
+  assert.ok(commands.includes('codexAnyDevice.openSetup'));
+  await vscode.commands.executeCommand('codexAnyDevice.openSetup');
+  assert.ok(controller.panel);
+  const firstPanel = controller.panel;
+  await vscode.commands.executeCommand('codexAnyDevice.openSetup');
+  assert.equal(controller.panel, firstPanel);
+  assert.match(firstPanel.webview.html, /default-src 'none'/);
+
+  await controller.store.saveBot('123456789', 'synthetic-host-secret');
+  await controller.store.saveSender('synthetic_host_sender');
+  const folder = vscode.workspace.workspaceFolders[0];
+  await controller.store.saveProject({ name: folder.name, path: await fs.realpath(folder.uri.fsPath) });
+  await controller.refresh();
+  const model = await controller.model();
+  assert.equal(model.complete, true);
+  assert.doesNotMatch(JSON.stringify(model), /synthetic-host-secret/);
+  await controller.act('preview');
+  const preview = vscode.window.activeTextEditor.document.getText();
+  assert.match(preview, /QQBOT_CLIENT_SECRET/);
+  assert.doesNotMatch(preview, /synthetic-host-secret/);
+  await controller.openDocument('docs/setup.md');
+  assert.match(vscode.window.activeTextEditor.document.getText(), /0\.2\.0/);
+  await controller.store.clear();
+  assert.equal((await controller.model()).complete, false);
+  await controller.refresh();
+  controller.panel.reveal();
+  if (process.env.ANYDEVICE_HOST_LAYOUT_GATE) {
+    await vscode.commands.executeCommand('workbench.action.closeSidebar');
+    await vscode.commands.executeCommand('workbench.action.closeAuxiliaryBar');
+    await vscode.commands.executeCommand('workbench.action.closePanel');
+    await fs.writeFile(process.env.ANYDEVICE_HOST_LAYOUT_READY, 'ready');
+    const deadline = Date.now() + 60000;
+    while (true) {
+      try { await fs.access(process.env.ANYDEVICE_HOST_LAYOUT_GATE); break; } catch { /* Wait for external layout inspection. */ }
+      assert.ok(Date.now() < deadline, 'Layout inspection completed within one minute');
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+  }
+  await fs.writeFile(process.env.ANYDEVICE_HOST_REPORT, JSON.stringify({
+    passed: 7, checks: ['real activation', 'commands', 'one webview and CSP',
+      'SecretStorage and metadata', 'secret-free preview', 'bundled guide', 'clear state'],
+  }, null, 2));
+}
+
+module.exports = { run };

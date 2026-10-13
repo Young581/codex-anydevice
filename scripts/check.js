@@ -25,9 +25,18 @@ for (const command of manifest.contributes.commands) {
   assert.ok(defaultLocale[key] && chineseLocale[key], `Missing locale: ${key}`);
 }
 
-for (const file of ['extension/extension.js', 'scripts/check.js', 'tests/extension.test.js']) {
+const javascript = (directory) => fs.readdirSync(path.join(root, directory), { withFileTypes: true }).flatMap((entry) => {
+  const relative = `${directory}/${entry.name}`;
+  return entry.isDirectory() ? javascript(relative) : relative.endsWith('.js') ? [relative] : [];
+});
+for (const file of [...javascript('extension'), ...javascript('scripts'), ...javascript('tests')]) {
   const result = spawnSync(process.execPath, ['--check', path.join(root, file)], { encoding: 'utf8' });
   assert.equal(result.status, 0, result.stderr);
+}
+for (const config of Object.values(manifest.contributes.configuration.properties)) {
+  const key = config.description.replace(/^%|%$/g, '');
+  assert.ok(defaultLocale[key] && chineseLocale[key], `Missing setting locale: ${key}`);
+  assert.equal(config.scope, 'machine');
 }
 
 const docs = fs.readdirSync(path.join(root, 'docs')).map((file) => `docs/${file}`);

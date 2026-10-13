@@ -3,6 +3,13 @@
 !package.nls.json
 !package.nls.zh-cn.json
 !extension/extension.js
+!extension/lib/setup-model.js
+!extension/lib/setup-controller.js
+!extension/lib/runtime.js
+!extension/lib/strings.js
+!extension/lib/webview.js
+!extension/assets/setup.js
+!extension/assets/setup.css
 !README.md
 !README.en.md
 !CHANGELOG.md
@@ -13,3 +20,4 @@
 !docs/architecture.md
 !docs/openclaw-poc.md
 !docs/roadmap.md
+!docs/setup.md

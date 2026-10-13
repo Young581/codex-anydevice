@@ -30,7 +30,7 @@ jobs:
       - name: Source and manifest checks
         run: node scripts/check.js
       - name: Extension commands with synthetic host
-        run: node --test tests/extension.test.js
+        run: node --test tests/extension.test.js tests/setup.test.js tests/runtime.test.js
       - name: Package boundary checks
         run: python -B tests/package_validation.py
       - name: Build development VSIX

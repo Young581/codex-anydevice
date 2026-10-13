@@ -47,7 +47,7 @@ def xml_assets(package, payload):
     types = ET.Element('Types', xmlns='http://schemas.openxmlformats.org/package/2006/content-types')
     for suffix in sorted({PurePosixPath(name).suffix.lstrip('.') for name in payload} | {'vsixmanifest'}):
         if suffix:
-            mime = {'json': 'application/json', 'js': 'application/javascript', 'md': 'text/markdown',
+            mime = {'json': 'application/json', 'js': 'application/javascript', 'md': 'text/markdown', 'css': 'text/css',
                     'vsixmanifest': 'text/xml'}.get(suffix, 'text/plain')
             ET.SubElement(types, 'Default', Extension=suffix, ContentType=mime)
     ET.SubElement(types, 'Override', PartName='/extension/LICENSE', ContentType='text/plain')

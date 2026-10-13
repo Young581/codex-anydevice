@@ -1,10 +1,10 @@
 # Codex AnyDevice
 
-[English](README.en.md) · [调研报告](docs/research.md) · [开发路线](docs/roadmap.md) · [维护方案](docs/maintenance.md)
+[English](README.en.md) · [配置向导说明](docs/setup.md) · [调研报告](docs/research.md) · [开发路线](docs/roadmap.md)
 
 计划通过手机上的 QQ、微信和 OpenClaw 操控电脑上的 Codex，并在 VS Code 中管理项目、任务和会话交接。社区项目，非 OpenAI、腾讯或 Microsoft 官方产品。
 
-**当前状态：0.1.0 研发骨架。** 已提供调研、架构、开发计划、扩展入口、三平台 CI 和 VSIX 构建审计；尚未实现手机收发消息、Codex 执行、会话接管或远程审批。没有市场发布。
+**当前状态：0.2.0 个人 QQ 配置向导。** 可以检测环境与本机网关、保存机器人信息、绑定自己的 QQ 身份、选择一个项目、预览配置片段并复制手机绑定指令。机器人未创建时可先完成其他准备并保存进度。尚未自动应用配置、启动网关或实现手机消息和 Codex 执行；没有市场发布。
 
 用户优先级：两种用法都需要，先打通手机发起新任务，再支持已有会话续聊、提问和审批。
 
@@ -16,16 +16,16 @@
 
 ## 开发
 
-需要 Node 22+、Python 3.8+、VS Code 1.96+。当前骨架没有 npm 运行时或开发依赖。
+需要 Node 22+、Python 3.8+、VS Code 1.96+。扩展没有 npm 运行时或开发依赖；外部 OpenClaw 的 Node 要求见[配置说明](docs/setup.md)。
 
 ```text
 node scripts/check.js
-node --test tests/extension.test.js
+node --test tests/extension.test.js tests/setup.test.js tests/runtime.test.js
 python -B tests/package_validation.py
 python -B build.py --output dist
 ```
 
-在 VS Code 中按 F5 启动 Extension Development Host，运行 **Codex AnyDevice: 打开调研与开发方案** 或 **查看开发状态**。运行入口只展示文档与开发状态。
+在 VS Code 中按 F5 启动 Extension Development Host，点击状态栏 **Codex AnyDevice** 或运行 **打开个人 QQ 配置向导**。向导支持中英文、深浅主题和窄窗口。密钥通过密码框输入并保存到 SecretStorage；网页和配置预览不包含明文密钥。
 
 `dist/` 是开发用离线 VSIX；首次正式发布须使用官方 `@vscode/vsce`，审计同一份包并完成隔离宿主验收，见[发布流程](docs/releases.md)。
 
