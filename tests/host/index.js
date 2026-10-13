@@ -8,7 +8,7 @@ const path = require('node:path');
 async function run() {
   const extension = vscode.extensions.getExtension('Young581.codex-anydevice');
   assert.ok(extension, 'Extension is installed in the isolated host');
-  assert.equal(extension.packageJSON.version, '0.2.1');
+  assert.equal(extension.packageJSON.version, '0.2.2');
   assert.equal(extension.packageJSON.contributes.configuration.properties['codexAnyDevice.openclawPath'], undefined);
   if (process.env.ANYDEVICE_HOST_EXPECT_EXTENSION_PATH) {
     assert.equal(await fs.realpath(extension.extensionPath),
@@ -39,9 +39,17 @@ async function run() {
   assert.equal(JSON.parse(preview).phoneConnection, 'pendingDevelopment');
   assert.doesNotMatch(preview, /synthetic-host-secret/);
   await controller.openDocument('docs/setup.md');
-  assert.match(vscode.window.activeTextEditor.document.getText(), /0\.2\.1/);
+  assert.match(vscode.window.activeTextEditor.document.getText(), /0\.2\.2/);
   await controller.store.clear();
   assert.equal((await controller.model()).complete, false);
+  const { checkEnvironment } = require(path.join(extension.extensionPath, 'extension/lib/runtime'));
+  controller.environment = await checkEnvironment({ platform: 'linux', env: { PATH: '/synthetic' },
+    exists: () => true, run: async (_spec, args) => args[0] === '--version'
+      ? { code: 0, stdout: 'codex-cli 0.162.0-alpha.17.2' }
+      : { code: 0, stderr: 'Logged in using an API key - synthetic-host-api-secret' } });
+  const authModel = await controller.model();
+  assert.equal(authModel.environment.codex.login, 'apiKey');
+  assert.doesNotMatch(JSON.stringify(authModel), /synthetic-host-api-secret/);
   await controller.refresh();
   controller.panel.reveal();
   if (process.env.ANYDEVICE_HOST_LAYOUT_GATE) {
@@ -57,8 +65,8 @@ async function run() {
     }
   }
   await fs.writeFile(process.env.ANYDEVICE_HOST_REPORT, JSON.stringify({
-    passed: 7, checks: ['real activation', 'commands', 'one webview and CSP',
-      'SecretStorage and metadata', 'secret-free preview', 'bundled guide', 'clear state'],
+    passed: 8, checks: ['real activation', 'commands', 'one webview and CSP',
+      'SecretStorage and metadata', 'secret-free preview', 'bundled guide', 'clear state', 'synthetic API authentication summary'],
   }, null, 2));
 }
 

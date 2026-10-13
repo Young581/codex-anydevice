@@ -1,6 +1,6 @@
 # 个人 QQ 配置向导
 
-0.2.1 面向个人 QQ 直连：检测本机 Codex、密码框保存 QQ AppSecret、登记自己的 QQ OpenID、选择当前项目并预览配置摘要。用户使用流程不需要 OpenClaw。QQ 连接、消息收发和任务执行尚未实现；配置资料齐全只代表准备完成。
+0.2.2 面向个人 QQ 直连：检测本机 Codex、密码框保存 QQ AppSecret、登记自己的 QQ OpenID、选择当前项目并预览配置摘要。用户使用流程不需要 OpenClaw。QQ 连接、消息收发和任务执行尚未实现；配置资料齐全只代表准备完成。
 
 ## 打开向导
 
@@ -8,7 +8,11 @@
 
 ## 1. 准备电脑
 
-点击 **检查 Codex 环境**。只运行 `codex --version` 和 `codex login status`，显示版本与状态，不显示原始输出、账号邮箱、错误正文或令牌。这里检测的是所发现的 Codex CLI 状态，不等于当前编辑器中 Codex 会话的登录状态。
+点击 **检查 Codex 环境**。只运行 `codex --version` 和 `codex login status`，显示版本与认证方式，不显示原始输出、账号邮箱、错误正文或令牌。这里检测的是所发现的 Codex CLI 状态，不等于当前编辑器中 Codex 会话的认证状态。
+
+**ChatGPT 登录和 API Key 都可用于本地 Codex。** 向导分别显示“已检测到 ChatGPT 登录”和“已检测到 API Key”。“未检测到 OpenAI 认证”仅表示 CLI 没有报告 OpenAI 登录；自定义服务商可以使用自己的环境变量或其他认证配置，需要单独核验，不能据此判为不可用。未知输出或探测失败显示“状态未确认”，不推断已登录。
+
+检测不会调用模型或验证密钥有效性，不消耗模型 API 额度，也不检查自定义服务商配置。本插件不读取、复制或修改你的 Codex 登录文件、配置文件或 API Key；无需在 AnyDevice 向导再次填写模型密钥。即使认证未确认，也可以保存 QQ 与项目资料。后续任务执行需另行验收所选 CLI 的实际认证、模型与服务商配置，不能假定它与编辑器当前会话一致。
 
 Codex 从 PATH、Windows npm 启动目录或已安装的 OpenAI Codex 扩展发现。Windows 的 `codex.cmd` 转换为 Node 调用对应包入口，不经过命令解释器。npm 入口不可运行时会尝试已安装扩展的原生程序。发现失败时可在页面手动指定 Codex 的绝对路径；设置为机器级，避免项目配置与跨设备同步覆盖它。
 
@@ -26,7 +30,7 @@ Codex 从 PATH、Windows npm 启动目录或已安装的 OpenAI Codex 扩展发�
 
 向导只允许从当前打开的本地文件夹选择一个项目，保存其真实目录。切换项目通过重新选择完成；不是自动授予当前所有项目。预览或复制前重新检查目录是否存在、是否被链接替换。
 
-选定目录只是计划的默认工作目录，不是文件访问沙箱；远程执行时仍需核对 Codex 实际权限、沙箱与信任配置。0.2.1 不执行 Codex 任务，也不改变项目文件。
+选定目录只是计划的默认工作目录，不是文件访问沙箱；远程执行时仍需核对 Codex 实际权限、沙箱与信任配置。0.2.2 不执行 Codex 任务，也不改变项目文件。
 
 ## 资料齐全之后
 
@@ -46,8 +50,12 @@ Codex 从 PATH、Windows npm 启动目录或已安装的 OpenAI Codex 扩展发�
 
 Open **Codex AnyDevice: Open personal QQ setup wizard** in a trusted local folder. Check the computer, enter QQ credentials using native password input, bind your explicit bot-specific OpenID, and choose one project. Progress is saved locally; AppSecret is held by VS Code SecretStorage.
 
-Version 0.2.1 prepares direct QQ access without an OpenClaw dependency. It checks Codex and retains 0.2.0 setup data. The preview summarizes saved details and planned authorization; direct QQ messaging and task execution are still pending development. Actual QQ WebSocket eligibility must be checked for the bot, while Webhook access requires an HTTPS callback. Complete setup details do not prove phone connectivity. Keep VS Code and the computer running for the planned direct mode. A working directory is not a filesystem sandbox.
+Version 0.2.2 prepares direct QQ access without an OpenClaw dependency. It checks Codex and retains 0.2.0 setup data. CLI authentication checks distinguish ChatGPT sign-in and API keys. Undetected OpenAI authentication does not rule out a custom provider; unknown or failed checks do not prove sign-in. Checks do not validate requests, spend model API credits or describe the current editor session. AnyDevice does not read, copy or modify Codex authentication/configuration files or API keys. Setup details can be saved regardless of authentication detection. Actual execution with the selected CLI and provider needs separate verification.
+
+The preview summarizes saved details and planned authorization; direct QQ messaging and task execution are still pending development. Actual QQ WebSocket eligibility must be checked for the bot, while Webhook access requires an HTTPS callback. Complete setup details do not prove phone connectivity. Keep VS Code and the computer running for the planned direct mode. A working directory is not a filesystem sandbox.
 
 ## 官方依据
 
 2026-10-13 实际查阅：[QQ 启动接入](https://bot.q.qq.com/wiki/develop/api-v2/)、[QQ 事件与连接维护](https://bot.q.qq.com/wiki/develop/api-v2/dev-prepare/interface-framework/event-emit.html)、[OpenAI 认证](https://learn.chatgpt.com/docs/auth)、[Codex CLI](https://learn.chatgpt.com/docs/cli)、[Codex App Server](https://learn.chatgpt.com/docs/app-server)。
+
+2026-10-14 重新获取 [OpenAI 认证](https://learn.chatgpt.com/docs/auth)与[配置参考](https://learn.chatgpt.com/docs/config-file/config-reference)，核对本地 API Key 支持、CLI 认证状态命令及 `model_providers.<id>.env_key` / `requires_openai_auth`；据此修正 0.2.2 的状态文案，未测试真实密钥或发起模型请求。

@@ -55,8 +55,27 @@ test('Codex falls back to the installed native binary when an npm entry cannot r
 
 test('successful process exit does not imply login', () => {
   assert.equal(parseLogin({ code: 0, stdout: 'status unavailable' }), 'unknown');
-  assert.equal(parseLogin({ code: 0, stderr: 'Logged in using ChatGPT' }), 'signedIn');
+  assert.equal(parseLogin({ code: 0, stderr: 'Logged in using ChatGPT' }), 'chatgpt');
   assert.equal(parseLogin({ code: 1, stderr: 'Not logged in' }), 'signedOut');
+  assert.equal(parseLogin({ code: 0, stderr: 'Logged in using future method' }), 'signedIn');
+  assert.equal(parseLogin({ code: 1, stderr: 'Logged in using ChatGPT' }), 'unknown');
+  assert.equal(parseLogin({ code: null, stderr: 'Not logged in' }), 'unknown');
+  assert.equal(parseLogin({ code: 0, stderr: 'Logged in using ChatGPT', timedOut: true }), 'unknown');
+  assert.equal(parseLogin({ code: 0, stderr: 'Diagnostic: Logged in using ChatGPT' }), 'unknown');
+});
+
+test('API key authentication is recognized without retaining key details', async () => {
+  for (const message of ['Logged in using an API key - synthetic-api-key', 'Logged in using API key']) {
+    for (const stream of ['stdout', 'stderr']) {
+      assert.equal(parseLogin({ code: 0, [stream]: message }), 'apiKey');
+    }
+  }
+  const snapshot = await checkEnvironment({ platform: 'linux', exists: () => true,
+    env: { PATH: '/usr/bin' }, run: async (_spec, args) => args[0] === '--version'
+      ? { code: 0, stdout: 'codex-cli 1.2.3' }
+      : { code: 0, stderr: 'Logged in using an API key - synthetic-api-key' } });
+  assert.equal(snapshot.codex.login, 'apiKey');
+  assert.doesNotMatch(JSON.stringify(snapshot), /synthetic-api-key|stderr|stdout/);
 });
 
 test('environment probes only Codex and omits raw errors, identities and tokens', async () => {
@@ -71,7 +90,7 @@ test('environment probes only Codex and omits raw errors, identities and tokens'
     } });
   assert.deepEqual(commands, [['--version'], ['login', 'status']]);
   assert.deepEqual(Object.keys(snapshot).sort(), ['checked', 'codex']);
-  assert.equal(snapshot.codex.login, 'signedIn'); assert.doesNotMatch(JSON.stringify(snapshot), /synthetic-token|private-host|example.invalid/);
+  assert.equal(snapshot.codex.login, 'chatgpt'); assert.doesNotMatch(JSON.stringify(snapshot), /synthetic-token|private-host|example.invalid/);
 });
 
 test('real subprocess receives metacharacters as literal arguments', async () => {

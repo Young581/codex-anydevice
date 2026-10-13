@@ -72,8 +72,14 @@ function run(spec, args, options = {}) {
 
 function parseLogin(result) {
   const text = (result.stdout || '') + '\n' + (result.stderr || '');
-  if (result.code === 0 && /logged in using/i.test(text)) return 'signedIn';
-  if (/not logged in/i.test(text)) return 'signedOut';
+  if (result.timedOut || result.unavailable) return 'unknown';
+  const method = text.match(/^[ \t]*logged in using[ \t]+([^\r\n]+)/im)?.[1];
+  if (result.code === 0 && method) {
+    if (/^ChatGPT\b/i.test(method)) return 'chatgpt';
+    if (/^(?:an? )?API key\b/i.test(method)) return 'apiKey';
+    return 'signedIn';
+  }
+  if ([0, 1].includes(result.code) && /^[ \t]*not logged in[ \t]*$/im.test(text)) return 'signedOut';
   return 'unknown';
 }
 

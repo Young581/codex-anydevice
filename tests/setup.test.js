@@ -80,6 +80,22 @@ test('deleted project cannot produce a setup summary', async (t) => {
   assert.equal(f.calls.filter((call) => call[0] === 'open').length, 0); assert.match(f.controller.notice, /重新选择/);
 });
 
+test('CLI authentication status does not prevent saving or reviewing setup details', async (t) => {
+  const f = fixture(t);
+  await f.controller.store.saveBot(appId, secret);
+  await f.controller.store.saveSender(senderId);
+  await f.controller.store.saveProject(f.project);
+  for (const login of ['signedOut', 'apiKey', 'chatgpt', 'unknown']) {
+    f.controller.check = async () => ({ checked: true, codex: { found: true, login } });
+    await f.controller.act('check');
+    assert.equal((await f.controller.model()).complete, true);
+    assert.equal((await f.controller.model()).environment.codex.login, login);
+    await f.controller.act('preview');
+    assert.equal(f.controller.notice, '');
+  }
+  assert.equal(f.calls.filter((call) => call[0] === 'open').length, 4);
+});
+
 test('unknown actions and revoked workspace trust cannot mutate setup', async (t) => {
   const f = fixture(t); await f.controller.receive({ type: 'action', action: 'executeShell', secret });
   f.api.workspace.isTrusted = false; await f.controller.receive({ type: 'action', action: 'credentials' });

@@ -37,7 +37,7 @@ function update(model) {
   const env = model.environment;
   const status = (tool) => !env ? t.untested : !tool?.found ? t.missing : tool.version || t.unknown;
   showRuntime('Codex', status(env?.codex));
-  showRuntime(model.language.startsWith('zh') ? 'Codex 登录' : 'Codex sign-in', env ? t[env.codex.login] : t.untested);
+  showRuntime(t.authLabel, !env ? t.untested : !env.codex?.found ? t.missing : t[env.codex.login] || t.unknown);
   if (env?.codex.detectedShim) showRuntime('Codex', t.shimHint);
   for (const button of document.querySelectorAll('button[data-action]')) {
     button.disabled = model.busy || (!model.complete && button.dataset.action === 'preview');

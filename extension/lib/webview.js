@@ -16,6 +16,7 @@ function render(webview, extensionUri, vscode) {
     <div class="progress"><span id="stage"></span><span id="progress"></span></div></header>
   <section><div class="heading"><span class="number">1</span><div><h2 id="environmentTitle"></h2><p id="environmentBody"></p></div></div>
     <div id="runtime" class="runtime" aria-live="polite"></div>
+    <p id="authNote" class="small"></p>
     <div class="actions"><button data-action="check" id="check"></button><button data-action="installGuide" id="install" class="secondary"></button></div>
     <details><summary id="pathsLabel"></summary><div class="actions"><button data-action="chooseCodex" id="codexPath" class="secondary"></button></div></details>
   </section>
