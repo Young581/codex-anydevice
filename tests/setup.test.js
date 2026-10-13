@@ -42,6 +42,32 @@ test('metadata persistence failure restores the previous credential', async () =
   assert.equal(instance.secrets.get(SECRET_KEY), secret); assert.equal(store.read().appId, appId);
 });
 
+test('identity guide opens without bot credentials or identity prompts', async (t) => {
+  const f = fixture(t);
+  await f.controller.act('identityGuide');
+  assert.deepEqual(f.calls, [
+    ['open', path.join(f.context.extensionUri, 'docs', 'qq-identity.md')],
+    ['show', path.join(f.context.extensionUri, 'docs', 'qq-identity.md')],
+  ]);
+  assert.equal(f.data.size, 0); assert.equal(f.secrets.size, 0);
+});
+
+test('manual identity requires bot credentials and cancelling preserves the recorded identity', async (t) => {
+  const f = fixture(t);
+  await assert.rejects(f.controller.store.saveSender(senderId), /botRequired/);
+  await f.controller.act('identity');
+  assert.equal(f.calls.filter(call => call[0] === 'input').length, 0);
+  assert.equal(f.controller.notice, zh.botRequired);
+  await f.controller.store.saveBot(appId, secret);
+  f.inputs.push(senderId); await f.controller.act('identity');
+  assert.equal(f.controller.store.read().senderId, senderId);
+  f.inputs.push(undefined); await f.controller.act('identity');
+  assert.equal(f.controller.store.read().senderId, senderId);
+  f.secrets.delete(SECRET_KEY);
+  await assert.rejects(f.controller.store.saveSender('different_synthetic_sender'), /botRequired/);
+  assert.equal(f.controller.store.read().senderId, senderId);
+});
+
 test('cancelled credential input preserves data and uses a password box', async (t) => {
   const f = fixture(t); await f.controller.store.saveBot(appId, secret); f.inputs.push('987654321', undefined);
   await f.controller.act('credentials'); assert.equal(f.controller.store.read().appId, appId);

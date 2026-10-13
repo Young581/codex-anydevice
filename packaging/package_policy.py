@@ -14,7 +14,7 @@ FILES = (
     'extension/lib/runtime.js', 'extension/lib/strings.js', 'extension/lib/webview.js',
     'extension/assets/setup.js', 'extension/assets/setup.css',
     'LICENSE', 'PRIVACY.md', 'SECURITY.md', 'docs/research.md',
-    'docs/architecture.md', 'docs/qq-direct-poc.md', 'docs/roadmap.md', 'docs/setup.md',
+    'docs/architecture.md', 'docs/qq-direct-poc.md', 'docs/qq-identity.md', 'docs/roadmap.md', 'docs/setup.md',
 )
 DOCUMENT_ALIASES = {
     'extension/LICENSE.txt': 'extension/LICENSE',

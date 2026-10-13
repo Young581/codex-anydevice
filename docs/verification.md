@@ -1,5 +1,18 @@
 # 验证记录
 
+## 0.2.3 QQ 身份获取说明 — 2026-10-14
+
+本轮说明身份登记的用途和官方获取途径，增加包内说明入口，将手动录入移至高级选项；自动配对、QQ 连接和任务执行仍未实现。未访问真实 QQ 账号、事件、身份或密钥。
+
+- 实际获取腾讯官方[单聊消息事件](https://bot.q.qq.com/wiki/develop/api-v2/autogen/event/c2c_message_create.html)（页面标注 2026-09-16 更新）、[发送单聊消息](https://bot.q.qq.com/wiki/develop/api-v2/autogen/api/v2_users_user_openid_messages.post.html)（页面标注 2026-09-03 更新）和[事件订阅说明](https://bot.q.qq.com/wiki/develop/api-v2/dev-prepare/interface-framework/event-emit.html)，核对 `C2C_MESSAGE_CREATE`、外层 `author.user_openid` 与 `GROUP_AND_C2C_EVENT`。说明区分 QQ 号码、群成员和跨应用身份，配对仍明确为计划流程。
+- Windows 源码、清单、双语资源、JavaScript 语法与文档链接检查通过；29 项 JavaScript 测试全部通过。新增无凭据时打开身份说明、无机器人资料时阻止手工登记、缺失密钥时阻止存储和取消保留身份检查；AppID 更换后清除旧身份继续通过。
+- Python 3.13.5 打包检查 10 项通过，1 项因普通用户符号链接权限而跳过。离线构建通过；`docs/qq-identity.md` 已经审查并加入两个明确打包清单。官方 `@vscode/vsce` 3.9.2 生成的 25 文件包通过白名单、敏感内容、身份与 SHA-256 审计，并用记录哈希再次复核同一份包。
+- 官方 VSIX SHA-256：`08f19eb3c794444eb3e1a430f744b38df2a246bde9a8ef3f440a86da599f2a3c`。该包未上传 Release 或 Marketplace，CI 离线包单独记录。
+- 将该包安装到全新隔离扩展/用户目录，VS Code 1.141.0 的 9 项真实宿主检查通过，新增无机器人凭据时通过向导动作打开安装包内的身份说明并核对字段；未自动登记或更改准备状态。其他激活、命令、页面/CSP、SecretStorage、摘要、配置说明、清除与合成 API 检查继续通过。
+- 已安装页面的实际脚本注入中英文资源与合成状态，11 个按钮均有标签，身份获取说明可见，手动录入位于默认折叠的高级区域。1000/400 像素工作台下内容视口与横向滚动宽度分别为 927/327 像素，窄窗口单列、无横向溢出，DOM 无合成密钥；已查看截图。深色中英文显示通过，浅色与其他平台真实宿主本轮未验收。
+
+真实 OpenID 获取、手机发消息、一次性配对、电脑确认、拒绝非法身份和 Codex 实际执行仍待专门验收；页面的“已登记，待验证”与资料齐全不构成已授权的证据。三平台 CI 以当前提交的 [Actions 记录](https://github.com/Young581/codex-anydevice/actions) 为准，原始报告与截图保留在忽略目录。
+
 ## 0.2.2 API 认证提示修正 — 2026-10-14
 
 本轮修正配置向导的认证判断与说明，兼顾个人用户的 ChatGPT 登录、API Key 和自定义服务商。没有读取真实 Codex 认证/配置文件、模型密钥、服务商地址或真实会话，也没有调用模型；QQ 直连和任务执行仍未实现。

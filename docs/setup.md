@@ -1,6 +1,6 @@
 # 个人 QQ 配置向导
 
-0.2.2 面向个人 QQ 直连：检测本机 Codex、密码框保存 QQ AppSecret、登记自己的 QQ OpenID、选择当前项目并预览配置摘要。用户使用流程不需要 OpenClaw。QQ 连接、消息收发和任务执行尚未实现；配置资料齐全只代表准备完成。
+0.2.3 面向个人 QQ 直连：检测本机 Codex、密码框保存 QQ AppSecret、查看身份获取说明、登记已有 QQ OpenID、选择当前项目并预览配置摘要。用户使用流程不需要 OpenClaw。QQ 连接、自动配对、消息收发和任务执行尚未实现；配置资料齐全只代表准备完成。
 
 ## 打开向导
 
@@ -22,7 +22,11 @@ Codex 从 PATH、Windows npm 启动目录或已安装的 OpenAI Codex 扩展发�
 
 在 [QQ 开放平台](https://q.qq.com/)创建官方机器人，在本机向导填写 AppID/AppSecret。AppSecret 使用 VS Code 密码输入框和 SecretStorage，不进入网页、剪贴板、配置摘要或日志。取消输入保留原配置；更换 AppID 会清除旧的 QQ 身份绑定，因为 OpenID 随机器人变化。尚未创建机器人时可先选择项目并保存进度。
 
-**绑定我的 QQ** 目前登记此机器人的本人用户 OpenID，来源为 QQ 官方单聊事件，不是昵称或 QQ 号码。尚未取得时保留其他进度，不填写通配符。后续直连版本计划通过短时配对码与电脑确认取得明确身份；当前尚未提供配对连接。
+点击 **QQ 身份怎么获取** 查看包内[获取说明](qq-identity.md)，无需已有机器人或身份。登记身份是为了将任务和审批限定为本人；AppID/AppSecret 用于连接机器人，不能代替对发信人的授权。
+
+OpenID 来自本人给此机器人的 `C2C_MESSAGE_CREATE` 单聊事件 `author.user_openid`（WebSocket 封套中为 `d.author.user_openid`），不是昵称、QQ 号码或群聊身份，不能用 QQ 号码推算。已经有事件接收程序时，可从这条新私聊的外层发信人读取；先保存机器人信息，再展开 **高级：已取得 OpenID** → **登记已有 OpenID**。当前仅保存登记资料，页面显示“已登记，待验证”，不宣称已完成配对。
+
+没有事件接收程序或尚未创建机器人时，可以先跳过身份步骤并保存其他进度，无需另建服务或填写猜测值。后续直连版本计划采用电脑开启短时配对、本人 QQ 发送一次性代码、插件取得身份、电脑明确确认的流程；当前尚无配对码、配对命令或自动获取按钮。身份尚未取得时不能生成包含允许发信人的摘要，任务和审批授权不会因此放宽。
 
 配置摘要记录计划允许的一个明确发信人、同一审批身份和禁用群聊策略；它不是已生效的访问控制。实际身份拒绝和审批需在直连实现后验收。
 
@@ -30,7 +34,7 @@ Codex 从 PATH、Windows npm 启动目录或已安装的 OpenAI Codex 扩展发�
 
 向导只允许从当前打开的本地文件夹选择一个项目，保存其真实目录。切换项目通过重新选择完成；不是自动授予当前所有项目。预览或复制前重新检查目录是否存在、是否被链接替换。
 
-选定目录只是计划的默认工作目录，不是文件访问沙箱；远程执行时仍需核对 Codex 实际权限、沙箱与信任配置。0.2.2 不执行 Codex 任务，也不改变项目文件。
+选定目录只是计划的默认工作目录，不是文件访问沙箱；远程执行时仍需核对 Codex 实际权限、沙箱与信任配置。0.2.3 不执行 Codex 任务，也不改变项目文件。
 
 ## 资料齐全之后
 
@@ -48,9 +52,9 @@ Codex 从 PATH、Windows npm 启动目录或已安装的 OpenAI Codex 扩展发�
 
 ## English
 
-Open **Codex AnyDevice: Open personal QQ setup wizard** in a trusted local folder. Check the computer, enter QQ credentials using native password input, bind your explicit bot-specific OpenID, and choose one project. Progress is saved locally; AppSecret is held by VS Code SecretStorage.
+Open **Codex AnyDevice: Open personal QQ setup wizard** in a trusted local folder. Check the computer, enter QQ credentials using native password input, read **How to get my QQ identity**, and choose one project. If you already have your bot-specific OpenID from the outer sender of your own `C2C_MESSAGE_CREATE` event, save bot credentials first and use the advanced manual entry. OpenID is not your QQ account number. Bot and project details can be saved without it; automatic pairing is not implemented yet. Recorded identity metadata is pending verification. See the [identity guide](qq-identity.md). Progress is saved locally; AppSecret is held by VS Code SecretStorage.
 
-Version 0.2.2 prepares direct QQ access without an OpenClaw dependency. It checks Codex and retains 0.2.0 setup data. CLI authentication checks distinguish ChatGPT sign-in and API keys. Undetected OpenAI authentication does not rule out a custom provider; unknown or failed checks do not prove sign-in. Checks do not validate requests, spend model API credits or describe the current editor session. AnyDevice does not read, copy or modify Codex authentication/configuration files or API keys. Setup details can be saved regardless of authentication detection. Actual execution with the selected CLI and provider needs separate verification.
+Version 0.2.3 prepares direct QQ access without an OpenClaw dependency. It checks Codex and retains 0.2.0 setup data. CLI authentication checks distinguish ChatGPT sign-in and API keys. Undetected OpenAI authentication does not rule out a custom provider; unknown or failed checks do not prove sign-in. Checks do not validate requests, spend model API credits or describe the current editor session. AnyDevice does not read, copy or modify Codex authentication/configuration files or API keys. Setup details can be saved regardless of authentication detection. Actual execution with the selected CLI and provider needs separate verification.
 
 The preview summarizes saved details and planned authorization; direct QQ messaging and task execution are still pending development. Actual QQ WebSocket eligibility must be checked for the bot, while Webhook access requires an HTTPS callback. Complete setup details do not prove phone connectivity. Keep VS Code and the computer running for the planned direct mode. A working directory is not a filesystem sandbox.
 
@@ -59,3 +63,5 @@ The preview summarizes saved details and planned authorization; direct QQ messag
 2026-10-13 实际查阅：[QQ 启动接入](https://bot.q.qq.com/wiki/develop/api-v2/)、[QQ 事件与连接维护](https://bot.q.qq.com/wiki/develop/api-v2/dev-prepare/interface-framework/event-emit.html)、[OpenAI 认证](https://learn.chatgpt.com/docs/auth)、[Codex CLI](https://learn.chatgpt.com/docs/cli)、[Codex App Server](https://learn.chatgpt.com/docs/app-server)。
 
 2026-10-14 重新获取 [OpenAI 认证](https://learn.chatgpt.com/docs/auth)与[配置参考](https://learn.chatgpt.com/docs/config-file/config-reference)，核对本地 API Key 支持、CLI 认证状态命令及 `model_providers.<id>.env_key` / `requires_openai_auth`；据此修正 0.2.2 的状态文案，未测试真实密钥或发起模型请求。
+
+同日重新获取腾讯官方[单聊消息事件](https://bot.q.qq.com/wiki/develop/api-v2/autogen/event/c2c_message_create.html)和[事件订阅说明](https://bot.q.qq.com/wiki/develop/api-v2/dev-prepare/interface-framework/event-emit.html)，按 `C2C_MESSAGE_CREATE` / `author.user_openid` 增加 0.2.3 获取说明；未接收真实事件。

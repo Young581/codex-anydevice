@@ -8,7 +8,7 @@ const { checkEnvironment } = require('./runtime');
 const { render } = require('./webview');
 
 const ACTIONS = new Set(['check', 'credentials', 'identity', 'selectProject', 'preview',
-  'guide', 'installGuide', 'createBot', 'clear', 'chooseCodex']);
+  'guide', 'identityGuide', 'installGuide', 'createBot', 'clear', 'chooseCodex']);
 const LINKS = {
   createBot: 'https://q.qq.com/',
   installGuide: 'https://learn.chatgpt.com/docs/cli',
@@ -79,10 +79,11 @@ class SetupController {
       else if (action === 'selectProject') await this.selectProject();
       else if (action === 'preview') await this.preview();
       else if (action === 'guide') await this.openDocument('docs/setup.md');
+      else if (action === 'identityGuide') await this.openDocument('docs/qq-identity.md');
       else if (action === 'clear') await this.clear();
       else if (action === 'chooseCodex') await this.chooseRuntime();
     } catch (error) {
-      const allowed = ['incomplete', 'invalidProject', 'noProject'];
+      const allowed = ['incomplete', 'invalidProject', 'noProject', 'botRequired'];
       this.notice = allowed.includes(error.message) ? this.t[error.message] : this.t.operationFailed;
       await this.vscode.window.showErrorMessage(this.notice);
     } finally {
@@ -116,6 +117,7 @@ class SetupController {
   }
 
   async identity() {
+    if (!readiness(this.store.read(), await this.store.hasSecret()).bot) throw new Error('botRequired');
     const sender = await this.vscode.window.showInputBox({ title: 'Codex AnyDevice',
       prompt: this.t.senderPrompt, placeHolder: this.t.senderHint, value: this.store.read().senderId || '',
       ignoreFocusOut: true, validateInput: (value) => validSender(value.trim()) ? undefined : this.t.invalidSender });

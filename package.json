@@ -2,7 +2,7 @@
   "name": "codex-anydevice",
   "displayName": "Codex AnyDevice",
   "description": "Prepare personal QQ direct access to Codex with secure credentials and one-project setup.",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "publisher": "Young581",
   "license": "MIT",
   "preview": true,

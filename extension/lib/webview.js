@@ -22,7 +22,9 @@ function render(webview, extensionUri, vscode) {
   </section>
   <section><div class="heading"><span class="number">2</span><div><h2 id="qqTitle"></h2><p id="qqBody"></p></div></div>
     <div class="facts"><span id="botState"></span><span id="identityState"></span></div><p id="secretNote" class="small"></p>
-    <div class="actions"><button data-action="credentials" id="credentials"></button><button data-action="identity" id="identity" class="secondary"></button><button data-action="createBot" id="createBot" class="secondary"></button></div>
+    <p id="identityNote" class="small"></p>
+    <div class="actions"><button data-action="credentials" id="credentials"></button><button data-action="identityGuide" id="identityGuide" class="secondary"></button><button data-action="createBot" id="createBot" class="secondary"></button></div>
+    <details><summary id="identityAdvanced"></summary><div class="actions"><button data-action="identity" id="identity" class="secondary"></button></div></details>
   </section>
   <section><div class="heading"><span class="number">3</span><div><h2 id="projectTitle"></h2><p id="projectBody"></p></div></div>
     <div class="project"><strong id="projectName"></strong><p id="projectPath" class="small"></p></div>

@@ -86,6 +86,7 @@ class SetupStore {
 
   async saveSender(senderId) {
     if (!validSender(senderId)) throw new Error('invalidSender');
+    if (!readiness(this.read(), await this.hasSecret()).bot) throw new Error('botRequired');
     await this.context.globalState.update(STATE_KEY, { ...this.read(), senderId });
   }
 

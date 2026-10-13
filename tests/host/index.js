@@ -8,7 +8,7 @@ const path = require('node:path');
 async function run() {
   const extension = vscode.extensions.getExtension('Young581.codex-anydevice');
   assert.ok(extension, 'Extension is installed in the isolated host');
-  assert.equal(extension.packageJSON.version, '0.2.2');
+  assert.equal(extension.packageJSON.version, '0.2.3');
   assert.equal(extension.packageJSON.contributes.configuration.properties['codexAnyDevice.openclawPath'], undefined);
   if (process.env.ANYDEVICE_HOST_EXPECT_EXTENSION_PATH) {
     assert.equal(await fs.realpath(extension.extensionPath),
@@ -39,8 +39,12 @@ async function run() {
   assert.equal(JSON.parse(preview).phoneConnection, 'pendingDevelopment');
   assert.doesNotMatch(preview, /synthetic-host-secret/);
   await controller.openDocument('docs/setup.md');
-  assert.match(vscode.window.activeTextEditor.document.getText(), /0\.2\.2/);
+  assert.match(vscode.window.activeTextEditor.document.getText(), /0\.2\.3/);
   await controller.store.clear();
+  assert.equal((await controller.model()).complete, false);
+  await controller.act('identityGuide');
+  assert.equal(path.basename(vscode.window.activeTextEditor.document.uri.fsPath), 'qq-identity.md');
+  assert.match(vscode.window.activeTextEditor.document.getText(), /author\.user_openid/);
   assert.equal((await controller.model()).complete, false);
   const { checkEnvironment } = require(path.join(extension.extensionPath, 'extension/lib/runtime'));
   controller.environment = await checkEnvironment({ platform: 'linux', env: { PATH: '/synthetic' },
@@ -65,8 +69,9 @@ async function run() {
     }
   }
   await fs.writeFile(process.env.ANYDEVICE_HOST_REPORT, JSON.stringify({
-    passed: 8, checks: ['real activation', 'commands', 'one webview and CSP',
-      'SecretStorage and metadata', 'secret-free preview', 'bundled guide', 'clear state', 'synthetic API authentication summary'],
+    passed: 9, checks: ['real activation', 'commands', 'one webview and CSP',
+      'SecretStorage and metadata', 'secret-free preview', 'bundled guide', 'clear state',
+      'bundled identity guide without credentials', 'synthetic API authentication summary'],
   }, null, 2));
 }
 
