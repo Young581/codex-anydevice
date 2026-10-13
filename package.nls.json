@@ -1,8 +1,7 @@
 {
   "command.openSetup": "Open personal QQ setup wizard",
-  "command.checkEnvironment": "Check environment and connection",
+  "command.checkEnvironment": "Check Codex environment",
   "config.codexPath": "Absolute path to Codex. Leave empty to discover PATH or the installed Codex extension.",
-  "config.openclawPath": "Absolute path to OpenClaw. Leave empty to discover PATH and the npm launcher.",
   "command.openResearch": "Open research and development plan",
   "command.showStatus": "Show development status"
 }

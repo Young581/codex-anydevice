@@ -2,16 +2,16 @@
 
 const fs = require('node:fs/promises');
 const path = require('node:path');
-const { SetupStore, readiness, configFragment, bindCommand, validAppId, validSecret, validSender } = require('./setup-model');
+const { SetupStore, readiness, setupSummary, validAppId, validSecret, validSender } = require('./setup-model');
 const { strings } = require('./strings');
 const { checkEnvironment } = require('./runtime');
 const { render } = require('./webview');
 
-const ACTIONS = new Set(['check', 'credentials', 'identity', 'selectProject', 'preview', 'copyBind',
-  'guide', 'installGuide', 'createBot', 'clear', 'chooseCodex', 'chooseOpenClaw']);
+const ACTIONS = new Set(['check', 'credentials', 'identity', 'selectProject', 'preview',
+  'guide', 'installGuide', 'createBot', 'clear', 'chooseCodex']);
 const LINKS = {
   createBot: 'https://q.qq.com/',
-  installGuide: 'https://docs.openclaw.ai/install',
+  installGuide: 'https://learn.chatgpt.com/docs/cli',
 };
 
 class SetupController {
@@ -78,10 +78,9 @@ class SetupController {
       else if (action === 'identity') await this.identity();
       else if (action === 'selectProject') await this.selectProject();
       else if (action === 'preview') await this.preview();
-      else if (action === 'copyBind') await this.copyBind();
       else if (action === 'guide') await this.openDocument('docs/setup.md');
       else if (action === 'clear') await this.clear();
-      else if (action === 'chooseCodex' || action === 'chooseOpenClaw') await this.chooseRuntime(action);
+      else if (action === 'chooseCodex') await this.chooseRuntime();
     } catch (error) {
       const allowed = ['incomplete', 'invalidProject', 'noProject'];
       this.notice = allowed.includes(error.message) ? this.t[error.message] : this.t.operationFailed;
@@ -99,8 +98,7 @@ class SetupController {
     const arch = process.arch === 'arm64' ? 'aarch64' : 'x86_64';
     const codexFallbacks = installedCodex && platform ? [path.join(installedCodex.extensionPath,
       'bin', `${platform}-${arch}`, process.platform === 'win32' ? 'codex.exe' : 'codex')] : [];
-    this.environment = await this.check({ codexPath: config.get('codexPath', ''),
-      openclawPath: config.get('openclawPath', ''), codexFallbacks });
+    this.environment = await this.check({ codexPath: config.get('codexPath', ''), codexFallbacks });
   }
 
   async credentials() {
@@ -148,14 +146,8 @@ class SetupController {
   async preview() {
     const state = await this.requireComplete();
     const document = await this.vscode.workspace.openTextDocument({ language: 'json',
-      content: JSON.stringify(configFragment(state), null, 2) + '\n' });
+      content: JSON.stringify(setupSummary(state), null, 2) + '\n' });
     await this.vscode.window.showTextDocument(document, { preview: true });
-  }
-
-  async copyBind() {
-    const state = await this.requireComplete();
-    await this.vscode.env.clipboard.writeText(bindCommand(state.project));
-    this.notice = this.t.copied;
   }
 
   async openDocument(relative) {
@@ -163,12 +155,11 @@ class SetupController {
     await this.vscode.window.showTextDocument(await this.vscode.workspace.openTextDocument(uri), { preview: true });
   }
 
-  async chooseRuntime(action) {
+  async chooseRuntime() {
     const result = await this.vscode.window.showOpenDialog({ title: this.t.chooseExecutable,
       canSelectFiles: true, canSelectFolders: false, canSelectMany: false });
     if (!result?.length || result[0].scheme !== 'file') return;
-    const key = action === 'chooseCodex' ? 'codexPath' : 'openclawPath';
-    await this.vscode.workspace.getConfiguration('codexAnyDevice').update(key, result[0].fsPath,
+    await this.vscode.workspace.getConfiguration('codexAnyDevice').update('codexPath', result[0].fsPath,
       this.vscode.ConfigurationTarget.Global);
     this.environment = undefined;
   }

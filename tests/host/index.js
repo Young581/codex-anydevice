@@ -8,7 +8,8 @@ const path = require('node:path');
 async function run() {
   const extension = vscode.extensions.getExtension('Young581.codex-anydevice');
   assert.ok(extension, 'Extension is installed in the isolated host');
-  assert.equal(extension.packageJSON.version, '0.2.0');
+  assert.equal(extension.packageJSON.version, '0.2.1');
+  assert.equal(extension.packageJSON.contributes.configuration.properties['codexAnyDevice.openclawPath'], undefined);
   if (process.env.ANYDEVICE_HOST_EXPECT_EXTENSION_PATH) {
     assert.equal(await fs.realpath(extension.extensionPath),
       await fs.realpath(process.env.ANYDEVICE_HOST_EXPECT_EXTENSION_PATH));
@@ -34,10 +35,11 @@ async function run() {
   assert.doesNotMatch(JSON.stringify(model), /synthetic-host-secret/);
   await controller.act('preview');
   const preview = vscode.window.activeTextEditor.document.getText();
-  assert.match(preview, /QQBOT_CLIENT_SECRET/);
+  assert.equal(JSON.parse(preview).mode, 'direct');
+  assert.equal(JSON.parse(preview).phoneConnection, 'pendingDevelopment');
   assert.doesNotMatch(preview, /synthetic-host-secret/);
   await controller.openDocument('docs/setup.md');
-  assert.match(vscode.window.activeTextEditor.document.getText(), /0\.2\.0/);
+  assert.match(vscode.window.activeTextEditor.document.getText(), /0\.2\.1/);
   await controller.store.clear();
   assert.equal((await controller.model()).complete, false);
   await controller.refresh();

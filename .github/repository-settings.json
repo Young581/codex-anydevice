@@ -5,7 +5,7 @@
   "settings": {
     "private": false,
     "default_branch": "main",
-    "description": "通过 QQ、微信与 OpenClaw 从手机操控 Codex 的 VS Code 插件。 / Control Codex from a phone through QQ, WeChat and OpenClaw.",
+    "description": "通过 QQ 官方机器人直接从手机操控 Codex 的 VS Code 插件。 / Personal QQ direct access to Codex from a phone.",
     "has_issues": true,
     "has_projects": true,
     "has_wiki": true,

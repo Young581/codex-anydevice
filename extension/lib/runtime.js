@@ -44,7 +44,6 @@ function invocation(file, options = {}) {
   if (platform === 'win32' && /\.(cmd|bat)$/i.test(file)) {
     // Resolve the npm package entry instead of passing paths or arguments to cmd.exe.
     const entries = {
-      'openclaw.cmd': ['openclaw', 'openclaw.mjs'],
       'codex.cmd': ['@openai', 'codex', 'bin', 'codex.js'],
     };
     const entryParts = entries[paths.basename(file).toLowerCase()];
@@ -78,56 +77,29 @@ function parseLogin(result) {
   return 'unknown';
 }
 
-function parseHealth(result) {
-  if (result.code !== 0) return result.unavailable ? 'missing' : 'unreachable';
-  try {
-    const health = JSON.parse(result.stdout);
-    return health.ok === true ? 'reachable' : 'unknown';
-  } catch { return 'unknown'; }
-}
-
-function version(result, tool) {
+function version(result) {
   if (result.code !== 0) return undefined;
   const body = result.stdout || result.stderr || '';
-  const pattern = tool === 'openclaw' ? /\b(20\d{2}\.\d+\.\d+(?:[-.][a-zA-Z0-9.-]+)?)/
-    : /\b(\d+\.\d+\.\d+(?:[-.][a-zA-Z0-9.-]+)?)/;
+  const pattern = /\b(\d+\.\d+\.\d+(?:[-.][a-zA-Z0-9.-]+)?)/;
   return body.match(pattern)?.[1];
-}
-
-function nodeCompatibility(value) {
-  const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(value || '');
-  if (!match) return 'unknown';
-  const [, major, minor] = match.map(Number);
-  return (major === 24 && minor >= 16) || (major === 26 && minor >= 1) ? 'supported' : 'unsupported';
 }
 
 async function checkEnvironment(options = {}) {
   const runner = options.run || run;
   const codexFile = findExecutable('codex', { ...options, configured: options.codexPath,
     fallbacks: options.codexFallbacks });
-  const openclawFile = findExecutable('openclaw', { ...options, configured: options.openclawPath });
-  const nodeFile = findExecutable('node', options);
   const codex = invocation(codexFile, options) || (!options.codexPath
     ? (options.codexFallbacks || []).map((file) => (options.exists || isFile)(file)
       ? invocation(file, options) : undefined).find(Boolean) : undefined);
-  const openclaw = invocation(openclawFile, options);
-  const node = invocation(nodeFile, options);
-  const [codexVersion, login, openclawVersion, nodeVersion, health] = await Promise.all([
+  const [codexVersion, login] = await Promise.all([
     runner(codex, ['--version']), runner(codex, ['login', 'status']),
-    runner(openclaw, ['--version']), runner(node, ['--version']),
-    runner(openclaw, ['health', '--json']),
   ]);
-  const detectedNodeVersion = version(nodeVersion, 'node');
   // Only bounded versions and states leave this module; raw CLI output never reaches the UI.
   return {
     checked: true,
-    codex: { found: Boolean(codex), version: version(codexVersion, 'codex'), login: parseLogin(login) },
-    openclaw: { found: Boolean(openclaw), version: version(openclawVersion, 'openclaw'),
-      detectedShim: Boolean(openclawFile && !openclaw) },
-    node: { found: Boolean(node), version: detectedNodeVersion,
-      compatibility: nodeCompatibility(detectedNodeVersion) },
-    gateway: parseHealth(health),
+    codex: { found: Boolean(codex), version: version(codexVersion), login: parseLogin(login),
+      detectedShim: Boolean(codexFile && !codex) },
   };
 }
 
-module.exports = { findExecutable, invocation, run, parseLogin, parseHealth, nodeCompatibility, checkEnvironment };
+module.exports = { findExecutable, invocation, run, parseLogin, checkEnvironment };

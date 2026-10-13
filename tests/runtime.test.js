@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { findExecutable, invocation, run, parseLogin, parseHealth, nodeCompatibility, checkEnvironment } = require('../extension/lib/runtime');
+const { findExecutable, invocation, run, parseLogin, checkEnvironment } = require('../extension/lib/runtime');
 
 test('discovery skips relative PATH entries and respects explicit absolute overrides', () => {
   const visited = []; const options = { platform: 'linux', env: { PATH: '.:relative:/usr/bin' },
@@ -14,16 +14,15 @@ test('discovery skips relative PATH entries and respects explicit absolute overr
 
 test('Windows discovery finds npm launcher without treating shell characters as commands', () => {
   const options = { platform: 'win32', env: { PATH: 'C:\\tools & data' },
-    exists: (file) => file === 'C:\\tools & data\\openclaw.cmd' };
-  assert.equal(findExecutable('openclaw', options), 'C:\\tools & data\\openclaw.cmd');
+    exists: (file) => file === 'C:\\tools & data\\codex.cmd' };
+  assert.equal(findExecutable('codex', options), 'C:\\tools & data\\codex.cmd');
   assert.equal(invocation('C:\\tools\\arbitrary.cmd', options), undefined);
-  assert.equal(findExecutable('openclaw', { ...options, env: { APPDATA: 'relative' } }), undefined);
+  assert.equal(findExecutable('codex', { ...options, env: { APPDATA: 'relative' } }), undefined);
 });
 
 test('Windows npm entry resolution requires a package entry and a native Node runtime', () => {
   const node = 'C:\\tools & data\\node.exe';
   for (const [name, entry] of [
-    ['openclaw', 'C:\\tools & data\\node_modules\\openclaw\\openclaw.mjs'],
     ['codex', 'C:\\tools & data\\node_modules\\@openai\\codex\\bin\\codex.js'],
   ]) {
     const options = { platform: 'win32', env: { PATH: 'C:\\tools & data' },
@@ -54,35 +53,24 @@ test('Codex falls back to the installed native binary when an npm entry cannot r
   assert.equal(override.codex.found, false);
 });
 
-test('OpenClaw Node requirements distinguish documented branches and unknown versions', () => {
-  for (const value of ['24.16.0', '24.21.0', '26.1.0', '26.2.0']) {
-    assert.equal(nodeCompatibility(value), 'supported', value);
-  }
-  for (const value of ['22.20.0', '24.15.9', '25.0.0', '26.0.9', '27.0.0']) {
-    assert.equal(nodeCompatibility(value), 'unsupported', value);
-  }
-  for (const value of [undefined, '26.1.0-rc.1', 'unavailable']) {
-    assert.equal(nodeCompatibility(value), 'unknown', value);
-  }
-});
-
-test('successful process exit does not imply login or gateway connectivity', () => {
+test('successful process exit does not imply login', () => {
   assert.equal(parseLogin({ code: 0, stdout: 'status unavailable' }), 'unknown');
   assert.equal(parseLogin({ code: 0, stderr: 'Logged in using ChatGPT' }), 'signedIn');
   assert.equal(parseLogin({ code: 1, stderr: 'Not logged in' }), 'signedOut');
-  assert.equal(parseHealth({ code: 0, stdout: '{"starting":true}' }), 'unknown');
-  assert.equal(parseHealth({ code: 0, stdout: '{"ok":true}' }), 'reachable');
-  assert.equal(parseHealth({ code: 1, stdout: '{"ok":true}' }), 'unreachable');
 });
 
-test('probe summaries omit raw errors, identities and tokens', async () => {
+test('environment probes only Codex and omits raw errors, identities and tokens', async () => {
+  const commands = [];
   const snapshot = await checkEnvironment({ platform: process.platform, exists: () => true,
     env: { PATH: process.platform === 'win32' ? 'C:\\tools' : '/usr/bin' },
     run: async (_spec, args) => {
+      commands.push(args);
       if (args[0] === '--version') return { code: 0, stdout: 'codex-cli 1.2.3' };
       if (args[0] === 'login') return { code: 0, stderr: 'Logged in using ChatGPT synthetic@example.invalid synthetic-token' };
-      return { code: 1, stderr: 'private-host synthetic-token' };
+      throw new Error('Unexpected runtime command');
     } });
+  assert.deepEqual(commands, [['--version'], ['login', 'status']]);
+  assert.deepEqual(Object.keys(snapshot).sort(), ['checked', 'codex']);
   assert.equal(snapshot.codex.login, 'signedIn'); assert.doesNotMatch(JSON.stringify(snapshot), /synthetic-token|private-host|example.invalid/);
 });
 

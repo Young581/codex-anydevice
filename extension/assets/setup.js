@@ -38,13 +38,9 @@ function update(model) {
   const status = (tool) => !env ? t.untested : !tool?.found ? t.missing : tool.version || t.unknown;
   showRuntime('Codex', status(env?.codex));
   showRuntime(model.language.startsWith('zh') ? 'Codex 登录' : 'Codex sign-in', env ? t[env.codex.login] : t.untested);
-  showRuntime('OpenClaw', status(env?.openclaw));
-  showRuntime(model.language.startsWith('zh') ? '本机网关' : 'Local gateway', env ? t[env.gateway] || t.unknown : t.untested);
-  showRuntime('Node', status(env?.node));
-  if (env?.node.compatibility === 'unsupported') showRuntime('Node / OpenClaw', t.nodeUnsupported);
-  if (env?.openclaw.detectedShim) showRuntime('OpenClaw', t.shimHint);
+  if (env?.codex.detectedShim) showRuntime('Codex', t.shimHint);
   for (const button of document.querySelectorAll('button[data-action]')) {
-    button.disabled = model.busy || (!model.complete && ['preview', 'copyBind'].includes(button.dataset.action));
+    button.disabled = model.busy || (!model.complete && button.dataset.action === 'preview');
   }
   byId('check').textContent = model.busy ? t.checking : t.check;
 }

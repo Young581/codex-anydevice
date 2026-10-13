@@ -17,7 +17,7 @@ function render(webview, extensionUri, vscode) {
   <section><div class="heading"><span class="number">1</span><div><h2 id="environmentTitle"></h2><p id="environmentBody"></p></div></div>
     <div id="runtime" class="runtime" aria-live="polite"></div>
     <div class="actions"><button data-action="check" id="check"></button><button data-action="installGuide" id="install" class="secondary"></button></div>
-    <details><summary id="pathsLabel"></summary><div class="actions"><button data-action="chooseCodex" id="codexPath" class="secondary"></button><button data-action="chooseOpenClaw" id="openclawPath" class="secondary"></button></div></details>
+    <details><summary id="pathsLabel"></summary><div class="actions"><button data-action="chooseCodex" id="codexPath" class="secondary"></button></div></details>
   </section>
   <section><div class="heading"><span class="number">2</span><div><h2 id="qqTitle"></h2><p id="qqBody"></p></div></div>
     <div class="facts"><span id="botState"></span><span id="identityState"></span></div><p id="secretNote" class="small"></p>
@@ -28,7 +28,7 @@ function render(webview, extensionUri, vscode) {
     <button data-action="selectProject" id="selectProject"></button>
   </section>
   <section><h2 id="finishTitle"></h2><p id="finishBody"></p>
-    <div class="actions"><button data-action="preview" id="preview" class="secondary"></button><button data-action="copyBind" id="copyBind" class="secondary"></button><button data-action="guide" id="guide" class="secondary"></button></div>
+    <div class="actions"><button data-action="preview" id="preview" class="secondary"></button><button data-action="guide" id="guide" class="secondary"></button></div>
   </section>
   <footer><p id="boundary" class="small"></p><p id="notice" role="status"></p><button data-action="clear" id="clear" class="text-button"></button></footer>
 </main><script nonce="${nonce}" src="${script}"></script></body></html>`;

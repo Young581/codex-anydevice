@@ -40,33 +40,19 @@ function readiness(state, hasSecret) {
   };
 }
 
-function configFragment(state) {
+function setupSummary(state) {
   if (!validAppId(state.appId) || !validSender(state.senderId) || !validProject(state.project)) {
     throw new Error('incomplete');
   }
   return {
-    channels: {
-      qqbot: {
-        enabled: true,
-        appId: state.appId,
-        clientSecret: { source: 'env', provider: 'default', id: 'QQBOT_CLIENT_SECRET' },
-        dmPolicy: 'allowlist',
-        allowFrom: [state.senderId],
-        groupPolicy: 'disabled',
-        groupAllowFrom: [],
-        contextVisibility: 'allowlist',
-        execApprovals: { approvers: [state.senderId] },
-      },
-    },
-    plugins: { entries: { codex: { enabled: true } } },
-    agents: { defaults: { workspace: state.project.path } },
+    channel: 'qq',
+    mode: 'direct',
+    bot: { appId: state.appId, credentialsStored: true },
+    plannedAuthorization: { allowedSenderId: state.senderId, approvalSenderId: state.senderId,
+      groups: 'disabled' },
+    project: { ...state.project },
+    phoneConnection: 'pendingDevelopment',
   };
-}
-
-function bindCommand(project) {
-  if (!validProject(project)) throw new Error('projectMissing');
-  // This is a chat command, never a shell command.
-  return '/codex bind --cwd ' + JSON.stringify(project.path);
 }
 
 class SetupStore {
@@ -116,4 +102,4 @@ class SetupStore {
 }
 
 module.exports = { STATE_KEY, SECRET_KEY, SetupStore, normalizeState, readiness,
-  configFragment, bindCommand, validAppId, validSender, validSecret, validProject };
+  setupSummary, validAppId, validSender, validSecret, validProject };

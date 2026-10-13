@@ -4,13 +4,13 @@
 
 ```mermaid
 flowchart LR
-  Phone[手机 QQ / 微信] --> Channel[腾讯渠道插件]
-  Channel --> Gateway[用户自己的 OpenClaw 网关]
-  Gateway --> Policy[身份与项目授权 / 会话路由]
+  Phone[手机 QQ] --> Channel[QQ 官方机器人接口]
+  Channel --> Adapter[AnyDevice QQ 连接与鉴权]
+  Adapter --> Policy[身份与项目授权 / 会话路由]
   Policy --> Codex[原生 Codex app-server]
   Codex --> Project[允许执行的项目]
-  Codex --> Gateway
-  Gateway --> Channel
+  Codex --> Adapter
+  Adapter --> Channel
   Channel --> Phone
   VSCode[VS Code AnyDevice] --> Policy
   Policy --> VSCode
@@ -18,9 +18,9 @@ flowchart LR
 
 ## 执行位置
 
-执行始终位于用户指定的电脑或远端工作环境。网关优先和 Codex 在同一环境，用本机 stdio 连接；手机使用腾讯消息渠道，不直接连接实验性的 app-server 端口。电脑休眠、离线或 VS Code 退出后的行为必须明确显示。
+第一版执行位于用户选择项目的本机。AnyDevice 直接连接 QQ 官方接口，用本机 stdio 调用 Codex app-server；手机使用腾讯消息渠道。QQ WebSocket 的实际账号准入需验证；Webhook 是需要 HTTPS 回调的另一种部署方式。电脑休眠、离线或 VS Code 退出后的行为必须明确显示。
 
-新任务原型先复用 OpenClaw 原生 Codex 路由。VS Code 生命周期和长驻网关生命周期分开：扩展关闭不等于网关任务被停止。是否需要独立服务必须在原型后确定，不能让 VS Code 退出导致状态无声丢失。
+新任务原型由扩展管理自己的 stdio app-server 连接和新建线程。连接生命周期跟随本地扩展宿主；关闭窗口或重载时停止接收新任务，正在执行的任务须按取消/未知状态记录，不能把断连视为完成。独立常驻服务属于后续可选场景，当前不增加用户安装步骤。
 
 本地窗口在本地执行；Remote SSH/容器窗口对应其远端项目。尚未实现的远端部署不自动转回本机运行，不通过手机消息创建任意 SSH 连接。
 
@@ -29,12 +29,12 @@ flowchart LR
 | 模块 | 责任 |
 | --- | --- |
 | VS Code 扩展 | 项目登记与授权、任务与会话列表、交接界面、配置与诊断 |
-| 渠道适配 | 复用腾讯 QQ/微信插件，校验原始渠道身份，规范消息与回传 |
-| 网关控制层 | 项目别名路由、权限、幂等、并发与重连；不再调用额外模型解释普通命令 |
+| QQ 渠道适配 | 腾讯官方鉴权、令牌刷新、事件订阅、心跳与恢复、原始身份和结果回传 |
+| 扩展控制层 | 项目别名路由、权限、消息去重、并发与恢复；普通指令使用明确解析规则 |
 | Codex 后端 | 官方 app-server 原生线程、轮次、审批与事件 |
 | 状态存储 | 最小路由与操作状态；单独定义隐私保留与清理 |
 
-0.2.0 已实现本地配置向导、状态栏、SecretStorage 凭据保存、项目选择与外部 CLI 检测。配置片段只是可审查的建议，不自动改 OpenClaw；控制层和消息收发在 QQ 机器人准备后实现，不提前假定未核实的内部 API。
+0.2.1 已实现本地配置向导、状态栏、SecretStorage 凭据保存、项目选择与 Codex CLI 检测，保留 0.2.0 配置数据。配置摘要只描述准备资料和计划的授权，不能当作已经生效的访问控制。QQ 连接、控制层和 Codex 执行仍待实现；OpenClaw 不再属于运行路线。
 
 ## 身份、项目和请求
 

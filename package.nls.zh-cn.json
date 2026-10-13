@@ -1,8 +1,7 @@
 {
   "command.openSetup": "打开个人 QQ 配置向导",
-  "command.checkEnvironment": "检查环境与连接",
+  "command.checkEnvironment": "检查 Codex 环境",
   "config.codexPath": "Codex 的绝对路径。留空时从 PATH 或已安装的 Codex 扩展发现。",
-  "config.openclawPath": "OpenClaw 的绝对路径。留空时从 PATH 与 npm 启动脚本发现。",
   "command.openResearch": "打开调研与开发方案",
   "command.showStatus": "查看开发状态"
 }

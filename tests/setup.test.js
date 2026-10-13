@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { SetupStore, STATE_KEY, SECRET_KEY, configFragment, normalizeState, bindCommand } = require('../extension/lib/setup-model');
+const { SetupStore, STATE_KEY, SECRET_KEY, setupSummary, normalizeState } = require('../extension/lib/setup-model');
 const { SetupController } = require('../extension/lib/setup-controller');
 const { zh, en } = require('../extension/lib/strings');
 const { host } = require('./helpers');
@@ -50,31 +50,34 @@ test('cancelled credential input preserves data and uses a password box', async 
   assert.equal(inputs[1][1].password, true); assert.equal(inputs[1][1].value, undefined);
 });
 
-test('incomplete setup cannot preview or copy a binding command', async (t) => {
+test('incomplete setup cannot preview and removed gateway actions are ignored', async (t) => {
   const f = fixture(t); await f.controller.act('preview'); await f.controller.act('copyBind');
+  await f.controller.act('chooseOpenClaw');
   assert.equal(f.calls.filter((call) => ['open', 'clipboard'].includes(call[0])).length, 0);
 });
 
-test('configuration enforces one sender, disables groups and uses a SecretRef', async (t) => {
+test('direct setup summary keeps the secret private and reports the pending connection', async (t) => {
   const f = fixture(t); await f.controller.store.saveBot(appId, secret);
   await f.controller.store.saveSender(senderId); await f.controller.store.saveProject(f.project);
-  const config = configFragment(f.controller.store.read());
-  assert.equal(config.channels.qqbot.dmPolicy, 'allowlist'); assert.deepEqual(config.channels.qqbot.allowFrom, [senderId]);
-  assert.equal(config.channels.qqbot.groupPolicy, 'disabled'); assert.equal(config.channels.qqbot.clientSecret.source, 'env');
+  const config = setupSummary(f.controller.store.read());
+  assert.equal(config.mode, 'direct'); assert.equal(config.phoneConnection, 'pendingDevelopment');
+  assert.equal(config.plannedAuthorization.allowedSenderId, senderId);
+  assert.equal(config.plannedAuthorization.approvalSenderId, senderId);
+  assert.equal(config.plannedAuthorization.groups, 'disabled');
   assert.doesNotMatch(JSON.stringify(config), new RegExp(secret));
   await f.controller.open(); await f.controller.refresh(); const model = f.messages.at(-1).model;
   assert.equal(model.complete, true); assert.doesNotMatch(JSON.stringify(model), new RegExp(secret));
   assert.equal(model.appId, undefined); assert.equal(model.senderId, undefined); assert.equal(model.environment, undefined);
-  await f.controller.act('copyBind');
-  const copied = f.calls.find((call) => call[0] === 'clipboard');
-  assert.ok(copied, f.controller.notice);
-  assert.equal(copied[1], bindCommand(f.project));
+  await f.controller.act('preview');
+  const opened = f.calls.find((call) => call[0] === 'open');
+  assert.ok(opened, f.controller.notice);
+  assert.doesNotMatch(JSON.stringify(opened), /synthetic-qq-secret|QQBOT_CLIENT_SECRET|plugins/);
 });
 
-test('deleted project cannot produce a usable binding', async (t) => {
+test('deleted project cannot produce a setup summary', async (t) => {
   const f = fixture(t); await f.controller.store.saveBot(appId, secret); await f.controller.store.saveSender(senderId);
-  await f.controller.store.saveProject(f.project); fs.rmdirSync(f.project.path); await f.controller.act('copyBind');
-  assert.equal(f.calls.filter((call) => call[0] === 'clipboard').length, 0); assert.match(f.controller.notice, /重新选择/);
+  await f.controller.store.saveProject(f.project); fs.rmdirSync(f.project.path); await f.controller.act('preview');
+  assert.equal(f.calls.filter((call) => call[0] === 'open').length, 0); assert.match(f.controller.notice, /重新选择/);
 });
 
 test('unknown actions and revoked workspace trust cannot mutate setup', async (t) => {
