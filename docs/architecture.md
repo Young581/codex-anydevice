@@ -1,6 +1,6 @@
 # 架构与控制边界
 
-0.3.2 已实现个人 QQ 官方 WebSocket 与 Codex 新线程原型，实际账号、手机与模型任务待验收。
+0.3.3 已实现个人 QQ 官方 WebSocket 与 Codex 新线程原型，实际账号、手机与模型任务待验收。
 
 ```mermaid
 flowchart LR
@@ -39,7 +39,7 @@ flowchart LR
 
 ## 原生策略与审批
 
-锁定 **0.162.0-alpha.17.2**，使用 `on-request` 与 `approvalsReviewer: user`，继承 CLI 认证、模型和服务商。请求单项目 workspace-write、工具网络关闭及临时额外写入关闭；核对返回有效策略才发起轮次。更严格 readOnly 保留并提示，其余不匹配拒绝。精确证据见[原型](qq-direct-poc.md)。
+锁定 **0.162.0-alpha.17.2**，使用 `on-request` 与 `approvalsReviewer: user`，继承 CLI 认证、模型和服务商。请求单项目 workspace-write、工具网络关闭及临时额外写入关闭；核对返回有效策略才发起轮次。工作目录自动作为可写根，`writableRoots` 是额外目录；接受空数组或仅包含原工作目录的等价表示，其他根仍拒绝。轮次不覆盖 cwd、审批或沙箱策略，继承已核对线程的完整原生限制，避免旧式沙箱字段遗漏读取规则。更严格 readOnly 保留并提示，其余不匹配拒绝。精确证据见[原型](qq-direct-poc.md)。
 
 请求精确绑定 requestId/threadId/turnId/itemId 与原生 startedAtMs，最多 2 分钟。电脑显示完整有界请求，仅 accept/decline，不自动审批、会话批准或持久规则。已解决、过期、结束、取消、配置变化的窗口不能允许其他请求。
 

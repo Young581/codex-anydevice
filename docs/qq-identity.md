@@ -1,6 +1,6 @@
 # QQ 身份怎么获取
 
-**0.3.2 自动取得身份，无需查找 QQ 号码或手填 ID。** 保存机器人信息和项目后，点击 **连接 QQ → 开始配对**，用本人 QQ 私聊发送页面上的 `/pair 一次性代码`，最后在电脑确认。
+**0.3.3 自动取得身份，无需查找 QQ 号码或手填 ID。** 保存机器人信息和项目后，点击 **连接 QQ → 开始配对**，用本人 QQ 私聊发送页面上的 `/pair 一次性代码`，最后在电脑确认。
 
 AppID/AppSecret 认证机器人，OpenID 识别发消息的用户。只接受配对后的本人私聊，防止其他人用机器人在电脑执行任务。Codex 请求审批在电脑处理，本版不接受 QQ 审批指令。
 
@@ -24,7 +24,7 @@ AppID/AppSecret 认证机器人，OpenID 识别发消息的用户。只接受配
 
 ## English
 
-Version 0.3.2 obtains OpenID automatically: connect, start pairing, send `/pair CODE` from your own private QQ chat and explicitly confirm on the computer. The identity comes from the outer `author.user_openid` in your C2C event to the same bot. It is not your QQ account number. Manual metadata still needs pairing. Restarts and explicit disconnect revoke verification. Requested approvals stay on the computer.
+Version 0.3.3 obtains OpenID automatically: connect, start pairing, send `/pair CODE` from your own private QQ chat and explicitly confirm on the computer. The identity comes from the outer `author.user_openid` in your C2C event to the same bot. It is not your QQ account number. Manual metadata still needs pairing. Restarts and explicit disconnect revoke verification. Requested approvals stay on the computer.
 
 ## 官方依据
 

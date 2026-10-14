@@ -1,6 +1,6 @@
 # QQ 官方直连原型与证据
 
-0.3.2 实现 **QQ 官方 WebSocket → AnyDevice → 本机 Codex app-server**，无需 OpenClaw 或公网回调。真实账号权限、手机与模型执行待验收。
+0.3.3 实现 **QQ 官方 WebSocket → AnyDevice → 本机 Codex app-server**，无需 OpenClaw 或公网回调。真实账号权限、手机与模型执行待验收。
 
 ## 2026-10-14 核对
 
@@ -37,6 +37,16 @@
 据此补充两个确切主机的 `/websocket` 接入点，不扩展为 QQ 域名通配。token/REST 继续使用当前文档的 `api.bot.qq.com`，未加入 sandbox、多分片、压缩或任意查询参数支持。地址拒绝仅给出固定类别，不保留完整地址。未读取用户实际 Gateway 返回值，因此尚不能断言该用户的地址具体是哪一种；实际连接需安装补丁后验收。
 
 ## 验收
+
+### 0.3.3 可写目录语义与策略继承 — 2026-10-14
+
+实际获取官方[配置参考](https://learn.chatgpt.com/docs/config-file/config-reference.md)、[沙箱与审批](https://learn.chatgpt.com/docs/agent-approvals-security.md)和[权限配置](https://learn.chatgpt.com/docs/permissions.md)。配置参考明确 `sandbox_workspace_write.writable_roots` 为 **additional writable roots**，沙箱说明工作区包含当前工作目录。精确 0.162.0-alpha.17.2 schema 中 `writableRoots` 默认空数组；TurnStartParams 中 cwd、approvalPolicy、approvalsReviewer、sandboxPolicy 是可省略的覆盖字段。
+
+使用全新合成 CODEX_HOME 与含中文/空格的项目目录，只调用初始化和 thread/start，未调用工具或系统 sandbox/setup。12 种配置组合中，未启用 Windows 沙箱时返回 readOnly；合成 `[windows] sandbox = "unelevated"` / `"elevated"` 时返回 workspaceWrite。即使请求的额外根包含 cwd，原生也将其去除并返回 `writableRoots: []`；另加一个合成目录时返回一条额外根。这证明空数组不是缺少项目权限，旧版要求必须包含 cwd 的校验会误拒绝有效策略。
+
+0.3.3 请求零额外根，接受空数组及只含原 cwd 的等价表示。cwd、on-request/user、工具网络关闭与临时写入关闭仍严格核对；其他根拒绝。turn/start 只发送 threadId 与输入，继承已验证的原生策略，避免重新构造 legacy sandbox 而遗漏原生读取限制。当前网页描述 access/readOnlyAccess，但该 alpha 的 legacy schema 未包含它们，不能声称已完整解析权限配置；继承不依赖重建这些字段。
+
+精确原生版本与带合成 Bearer 认证的本机 Responses 服务，在 readOnly 与 workspaceWrite 两种策略下分别验证正常完成和 HTTP 401 的 authentication 失败，共四个场景。真实模型调用为零。Windows 设置仅写入合成测试 home，不修改用户配置，不验证实际命令沙箱/文件写入/原生审批或手机执行。
 
 ### 0.3.2 任务失败处理核对 — 2026-10-14
 

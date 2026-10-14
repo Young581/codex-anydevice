@@ -185,7 +185,7 @@ function nativeFixture(t, options = {}) {
       if (options.respond?.(message, emit) === false) continue;
       if (message.method === 'initialize') emit({ id: message.id, result: { userAgent: 'synthetic' } });
       if (message.method === 'thread/start') emit({ id: message.id, result: { thread: { id: 'thread_synthetic' }, cwd,
-        approvalPolicy: 'on-request', approvalsReviewer: 'user', sandbox: { type: 'workspaceWrite', networkAccess: false, writableRoots: [cwd], excludeSlashTmp: true, excludeTmpdirEnvVar: true } } });
+        approvalPolicy: 'on-request', approvalsReviewer: 'user', sandbox: { type: 'workspaceWrite', networkAccess: false, writableRoots: [], excludeSlashTmp: true, excludeTmpdirEnvVar: true } } });
       if (message.method === 'turn/start') {
         emit({ method: 'turn/started', params: { threadId: 'thread_synthetic', turn: { id: 'turn_synthetic' } } });
         emit({ id: message.id, result: { turn: { id: 'turn_synthetic' } } });
@@ -212,7 +212,10 @@ test('Codex new task requests force user review, constrained sandbox and no mode
   const turn = f.writes.find(message => message.method === 'turn/start');
   assert.equal(thread.params.approvalsReviewer, 'user'); assert.equal(thread.params.approvalPolicy, 'on-request');
   assert.equal(thread.params.model, undefined); assert.equal(thread.params.modelProvider, undefined);
-  assert.deepEqual(turn.params.sandboxPolicy, { type: 'workspaceWrite', writableRoots: [f.cwd], networkAccess: false, excludeSlashTmp: true, excludeTmpdirEnvVar: true });
+  assert.deepEqual(thread.params.config, { 'sandbox_workspace_write.network_access': false,
+    'sandbox_workspace_write.writable_roots': [], 'sandbox_workspace_write.exclude_slash_tmp': true,
+    'sandbox_workspace_write.exclude_tmpdir_env_var': true });
+  assert.deepEqual(turn.params, { threadId: 'thread_synthetic', input: [{ type: 'text', text: 'synthetic task' }] });
   f.emit({ method: 'item/completed', params: { threadId: 'thread_synthetic', turnId: 'turn_synthetic', item: { type: 'agentMessage', text: 'synthetic result' } } });
   f.emit({ method: 'turn/completed', params: { threadId: 'thread_synthetic', turn: { id: 'turn_synthetic', status: 'completed' } } });
   assert.equal((await completion).status, 'completed');
@@ -225,8 +228,59 @@ test('Codex preserves a more restrictive native read-only policy', async t => {
       approvalPolicy: 'on-request', approvalsReviewer: 'user', sandbox: { type: 'readOnly', networkAccess: false } } }); return false;
   } });
   await f.session.start(f.cwd); const done = f.session.execute('synthetic', f.cwd); await tick();
-  assert.deepEqual(f.writes.find(message => message.method === 'turn/start').params.sandboxPolicy, { type: 'readOnly', networkAccess: false });
+  assert.deepEqual(f.writes.find(message => message.method === 'turn/start').params, {
+    threadId: 'thread_synthetic', input: [{ type: 'text', text: 'synthetic' }],
+  });
   f.session.stop(); assert.equal((await done).status, 'unknown');
+});
+
+test('Codex accepts explicit cwd roots while inheriting restrictive native read access', async t => {
+  for (const type of ['readOnly', 'workspaceWrite']) {
+    const f = nativeFixture(t, { respond(message, emit) {
+      if (message.method !== 'thread/start') return;
+      const cwd = message.params.cwd;
+      // Current official documentation includes read restrictions beyond the legacy
+      // fields in this alpha's schema. Inheritance must not replace native policy.
+      const access = { type: 'restricted', includePlatformDefaults: false, readableRoots: [cwd] };
+      const sandbox = type === 'readOnly' ? { type, networkAccess: false, access }
+        : { type, networkAccess: false, writableRoots: [cwd], excludeSlashTmp: true,
+          excludeTmpdirEnvVar: true, readOnlyAccess: access };
+      emit({ id: message.id, result: { thread: { id: 'thread_synthetic' }, cwd,
+        approvalPolicy: 'on-request', approvalsReviewer: 'user', sandbox } }); return false;
+    } });
+    const policies = []; f.session.on('policy', value => policies.push(value));
+    await f.session.start(f.cwd); const done = f.session.execute('synthetic', f.cwd); await tick();
+    const turn = f.writes.find(message => message.method === 'turn/start'); assert.ok(turn);
+    assert.equal(Object.hasOwn(turn.params, 'sandboxPolicy'), false);
+    assert.equal(Object.hasOwn(turn.params, 'cwd'), false);
+    assert.equal(Object.hasOwn(turn.params, 'approvalPolicy'), false);
+    assert.equal(Object.hasOwn(turn.params, 'approvalsReviewer'), false);
+    assert.deepEqual(policies, [{ readOnly: type === 'readOnly' }]);
+    f.emit({ method: 'turn/completed', params: { threadId: 'thread_synthetic', turn: { id: 'turn_synthetic', status: 'completed' } } });
+    assert.equal((await done).status, 'completed');
+  }
+});
+
+test('Codex rejects broader or unconfirmed policy even when additional roots are empty', async t => {
+  const cwd = path.resolve('synthetic-project');
+  const safe = { type: 'workspaceWrite', networkAccess: false, writableRoots: [], excludeSlashTmp: true, excludeTmpdirEnvVar: true };
+  const invalid = [
+    { cwd: path.dirname(cwd) }, { thread: { id: null } }, { approvalPolicy: 'never' }, { approvalsReviewer: 'auto_review' },
+    ...[{ type: 'dangerFullAccess' }, { type: 'externalSandbox' }, { networkAccess: true }, { networkAccess: undefined },
+      { excludeSlashTmp: false }, { excludeTmpdirEnvVar: false }, { writableRoots: undefined },
+      { writableRoots: [path.dirname(cwd)] }, { writableRoots: [cwd, path.resolve('synthetic-other-project')] },
+      { type: 'readOnly', networkAccess: true }].map(value => ({ sandbox: { ...safe, ...value } })),
+  ];
+  for (const override of invalid) {
+    const f = nativeFixture(t, { respond(message, emit) {
+      if (message.method !== 'thread/start') return;
+      emit({ id: message.id, result: { thread: { id: 'thread_synthetic' }, cwd,
+        approvalPolicy: 'on-request', approvalsReviewer: 'user', sandbox: safe, ...override } }); return false;
+    } });
+    await f.session.start(f.cwd); const result = await f.session.execute('synthetic', f.cwd);
+    assert.equal(result.status, 'failed'); assert.equal(result.error, 'codexPolicy'); assert.equal(result.phase, 'phaseThread');
+    assert.equal(f.writes.some(message => message.method === 'turn/start'), false);
+  }
 });
 
 test('Codex rejects unsupported versions and effective policy mismatches before a turn', async t => {

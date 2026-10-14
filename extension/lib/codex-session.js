@@ -64,7 +64,7 @@ class CodexSession extends EventEmitter {
     this.child.stdout.on('end', () => this.stop('codexDisconnected'));
     this.child.on('error', () => this.stop('codexSpawnFailed')); this.child.on('exit', () => this.stop('codexExited'));
     this.phase('phaseInitialize');
-    await this.rpc('initialize', { clientInfo: { name: 'codex_anydevice', title: 'Codex AnyDevice', version: '0.3.2' } });
+    await this.rpc('initialize', { clientInfo: { name: 'codex_anydevice', title: 'Codex AnyDevice', version: '0.3.3' } });
     this.write({ method: 'initialized', params: {} });
   }
 
@@ -170,7 +170,8 @@ class CodexSession extends EventEmitter {
     try {
       this.phase('phaseThread');
       const result = await this.rpc('thread/start', { cwd, approvalPolicy: 'on-request', approvalsReviewer: 'user', sandbox: 'workspace-write',
-        config: { 'sandbox_workspace_write.network_access': false, 'sandbox_workspace_write.writable_roots': [cwd],
+        // cwd is an implicit workspace root. writable_roots lists additional roots only.
+        config: { 'sandbox_workspace_write.network_access': false, 'sandbox_workspace_write.writable_roots': [],
           'sandbox_workspace_write.exclude_slash_tmp': true, 'sandbox_workspace_write.exclude_tmpdir_env_var': true } });
       if (this.active !== task) return completion;
       const readOnly = result?.sandbox?.type === 'readOnly';
@@ -178,7 +179,7 @@ class CodexSession extends EventEmitter {
         || result.approvalsReviewer !== 'user' || result.sandbox?.networkAccess !== false
         || (!readOnly && (result.sandbox?.type !== 'workspaceWrite' || result.sandbox.excludeSlashTmp !== true
           || result.sandbox.excludeTmpdirEnvVar !== true || !Array.isArray(result.sandbox.writableRoots)
-          || !result.sandbox.writableRoots.includes(cwd) || result.sandbox.writableRoots.some(root => root !== cwd)))) {
+          || result.sandbox.writableRoots.some(root => root !== cwd)))) {
         throw new Error('codexPolicy');
       }
       task.threadId = result.thread.id;
@@ -186,11 +187,9 @@ class CodexSession extends EventEmitter {
       if (task.cancelRequested) { this.finish('cancelled'); return completion; }
       this.phase('phaseTurn'); this.turnRequested = true;
       let turn;
-      try { turn = await this.rpc('turn/start', { threadId: task.threadId, cwd,
-        approvalPolicy: 'on-request', approvalsReviewer: 'user',
-        sandboxPolicy: readOnly ? { type: 'readOnly', networkAccess: false }
-          : { type: 'workspaceWrite', writableRoots: [cwd], networkAccess: false,
-            excludeSlashTmp: true, excludeTmpdirEnvVar: true }, input: [{ type: 'text', text: prompt }] });
+      // Inherit the validated thread policy, including native restrictions that the
+      // legacy sandbox response may not fully describe. Do not reconstruct it.
+      try { turn = await this.rpc('turn/start', { threadId: task.threadId, input: [{ type: 'text', text: prompt }] });
       } catch (error) { if (error.requestRejected) task.turnRejected = true; throw error; }
       if (typeof turn?.turn?.id !== 'string') throw new Error('codexProtocol');
       if (this.active === task) {

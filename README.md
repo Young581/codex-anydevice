@@ -4,7 +4,7 @@
 
 用手机 QQ 给电脑上的 Codex 发起新任务，在 VS Code 中选择项目、确认配对和处理审批。面向个人用户，不依赖 OpenClaw。社区项目，非 OpenAI、腾讯或 Microsoft 官方产品。
 
-**当前 0.3.2 为 QQ 官方 WebSocket 直连原型。** 已实现连接、短时配对码、电脑确认、`/new`、`/status`、`/cancel`、结果回传和电脑审批。合成测试与真实账号验收分别记录；机器人 WebSocket/私聊权限、手机实际收发、ChatGPT/API 真实任务仍需验收。没有 Marketplace 或正式 Release 发布。
+**当前 0.3.3 为 QQ 官方 WebSocket 直连原型。** 已实现连接、短时配对码、电脑确认、`/new`、`/status`、`/cancel`、结果回传和电脑审批。合成测试与真实账号验收分别记录；机器人 WebSocket/私聊权限、手机实际收发、ChatGPT/API 真实任务仍需验收。没有 Marketplace 或正式 Release 发布。
 
 ## 开始使用
 
