@@ -7,6 +7,25 @@ const { run, version } = require('./runtime');
 const CODEX_VERSION = '0.162.0-alpha.17.2';
 const APPROVALS = new Set(['item/commandExecution/requestApproval', 'item/fileChange/requestApproval']);
 const TERMINAL = { completed: 'completed', interrupted: 'cancelled', failed: 'failed' };
+const CODEX_ERRORS = Object.freeze(['codexMissing', 'codexUnsupported', 'codexUnsupportedRequest', 'codexPolicy',
+  'codexVersionProbe', 'codexSpawnFailed', 'codexExited', 'codexDisconnected', 'codexTimeout', 'codexProtocol',
+  'codexRequestFailed', 'codexRequestParams', 'codexAuth', 'codexLimit', 'codexProvider', 'codexSandbox', 'codexTaskFailed']);
+const CODEX_PHASES = Object.freeze(['phaseVersion', 'phaseInitialize', 'phaseThread', 'phaseTurn', 'phaseRunning']);
+const safeFailure = value => CODEX_ERRORS.includes(value) ? value : 'codexRequestFailed';
+function nativeFailure(error) {
+  const info = error?.codexErrorInfo;
+  if (info === 'unauthorized') return 'codexAuth';
+  if (['usageLimitExceeded', 'rateLimitExceeded', 'sessionBudgetExceeded'].includes(info)) return 'codexLimit';
+  if (info === 'sandboxError') return 'codexSandbox';
+  if (info === 'badRequest') return 'codexRequestParams';
+  for (const kind of ['httpConnectionFailed', 'responseStreamConnectionFailed', 'responseStreamDisconnected', 'responseTooManyFailedAttempts']) {
+    if (info && typeof info === 'object' && Object.hasOwn(info, kind)) {
+      const status = info[kind]?.httpStatusCode;
+      return [401, 403].includes(status) ? 'codexAuth' : status === 429 ? 'codexLimit' : 'codexProvider';
+    }
+  }
+  return 'codexTaskFailed';
+}
 
 class CodexSession extends EventEmitter {
   constructor(spec, options = {}) {
@@ -15,31 +34,37 @@ class CodexSession extends EventEmitter {
     this.counter = 0; this.closed = false; this.buffer = '';
   }
   now() { return (this.options.now || Date.now)(); }
+  phase(value) { this.currentPhase = value; this.emit('phase', value); }
 
   async start(cwd) {
     if (!this.spec || this.closed) throw new Error('codexMissing');
+    this.phase('phaseVersion');
     const probe = await (this.options.run || run)(this.spec, ['--version']);
     if (this.closed) throw new Error('codexDisconnected');
+    if (!version(probe)) throw new Error('codexVersionProbe');
     if (version(probe) !== CODEX_VERSION) throw new Error('codexUnsupported');
-    this.child = (this.options.spawn || spawn)(this.spec.file, [...this.spec.prefix, 'app-server'], {
+    try { this.child = (this.options.spawn || spawn)(this.spec.file, [...this.spec.prefix, 'app-server'], {
       cwd, shell: false, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'],
       env: this.options.env || { ...process.env, NO_COLOR: '1', FORCE_COLOR: '0' },
-    });
+    }); } catch { throw new Error('codexSpawnFailed'); }
     this.child.stdout.setEncoding('utf8');
     this.child.stdout.on('data', chunk => {
       this.buffer += chunk;
-      if (Buffer.byteLength(this.buffer) > 1024 * 1024) { this.stop(); return; }
+      if (Buffer.byteLength(this.buffer) > 1024 * 1024) { this.stop('codexProtocol'); return; }
       let newline;
       while (!this.closed && (newline = this.buffer.indexOf('\n')) >= 0) {
         const line = this.buffer.slice(0, newline); this.buffer = this.buffer.slice(newline + 1);
         if (!line.trim()) continue;
-        try { this.receive(JSON.parse(line)); } catch { this.stop(); return; }
+        try { this.receive(JSON.parse(line)); } catch { this.stop('codexProtocol'); return; }
       }
     });
     this.child.stderr.resume(); // Never log native stderr or credentials.
-    this.child.stdin.on('error', () => this.stop());
-    this.child.on('error', () => this.stop()); this.child.on('exit', () => this.stop());
-    await this.rpc('initialize', { clientInfo: { name: 'codex_anydevice', title: 'Codex AnyDevice', version: '0.3.1' } });
+    this.child.stdin.on('error', () => this.stop('codexDisconnected'));
+    this.child.stdout.on('error', () => this.stop('codexDisconnected'));
+    this.child.stdout.on('end', () => this.stop('codexDisconnected'));
+    this.child.on('error', () => this.stop('codexSpawnFailed')); this.child.on('exit', () => this.stop('codexExited'));
+    this.phase('phaseInitialize');
+    await this.rpc('initialize', { clientInfo: { name: 'codex_anydevice', title: 'Codex AnyDevice', version: '0.3.2' } });
     this.write({ method: 'initialized', params: {} });
   }
 
@@ -64,7 +89,7 @@ class CodexSession extends EventEmitter {
     const task = this.active; const params = message.params || {};
     if (message.method && Object.hasOwn(message, 'id')) {
       const id = message.id;
-      if (!(typeof id === 'string' || Number.isSafeInteger(id)) || this.seenRequests.has(id)) { this.stop(); return; }
+      if (!(typeof id === 'string' || Number.isSafeInteger(id)) || this.seenRequests.has(id)) { this.stop('codexProtocol'); return; }
       if (this.seenRequests.size >= 4096) { this.failure = 'codexUnsupportedRequest'; this.stop(); return; }
       this.seenRequests.add(id);
       const matches = task?.threadId && task.turnId && params.threadId === task.threadId && params.turnId === task.turnId;
@@ -97,7 +122,11 @@ class CodexSession extends EventEmitter {
     if (Object.hasOwn(message, 'id')) {
       const request = this.pending.get(message.id); if (!request) return;
       clearTimeout(request.timer); this.pending.delete(message.id);
-      message.error ? request.reject(new Error('codexRequestFailed')) : request.resolve(message.result); return;
+      if (message.error) {
+        const error = new Error([-32600, -32602].includes(message.error.code) ? 'codexRequestParams' : 'codexRequestFailed');
+        error.requestRejected = true; request.reject(error);
+      } else request.resolve(message.result);
+      return;
     }
     if (!task || params.threadId !== task.threadId) return;
     if (message.method === 'serverRequest/resolved') {
@@ -110,7 +139,14 @@ class CodexSession extends EventEmitter {
     if (message.method === 'item/completed' && params.turnId === task.turnId && params.item?.type === 'agentMessage') {
       if (typeof params.item.text === 'string') task.output = (task.output + '\n' + params.item.text).slice(-20000);
     }
-    if (message.method === 'turn/completed' && params.turn?.id === task.turnId) this.finish(TERMINAL[params.turn.status] || 'unknown');
+    if (message.method === 'error' && params.turnId === task.turnId && params.willRetry === false) {
+      task.nativeFailure = nativeFailure(params.error);
+    }
+    if (message.method === 'turn/completed' && params.turn?.id === task.turnId) {
+      if (params.turn.status === 'failed') this.failure = params.turn.error ? nativeFailure(params.turn.error)
+        : task.nativeFailure || 'codexTaskFailed';
+      this.finish(TERMINAL[params.turn.status] || 'unknown');
+    }
   }
 
   removeRequest(id) {
@@ -132,6 +168,7 @@ class CodexSession extends EventEmitter {
     const completion = new Promise(done => { resolve = done; });
     const task = { output: '', resolve, items: new Map() }; this.active = task;
     try {
+      this.phase('phaseThread');
       const result = await this.rpc('thread/start', { cwd, approvalPolicy: 'on-request', approvalsReviewer: 'user', sandbox: 'workspace-write',
         config: { 'sandbox_workspace_write.network_access': false, 'sandbox_workspace_write.writable_roots': [cwd],
           'sandbox_workspace_write.exclude_slash_tmp': true, 'sandbox_workspace_write.exclude_tmpdir_env_var': true } });
@@ -147,18 +184,25 @@ class CodexSession extends EventEmitter {
       task.threadId = result.thread.id;
       this.emit('policy', { readOnly });
       if (task.cancelRequested) { this.finish('cancelled'); return completion; }
-      const turn = await this.rpc('turn/start', { threadId: task.threadId, cwd,
+      this.phase('phaseTurn'); this.turnRequested = true;
+      let turn;
+      try { turn = await this.rpc('turn/start', { threadId: task.threadId, cwd,
         approvalPolicy: 'on-request', approvalsReviewer: 'user',
         sandboxPolicy: readOnly ? { type: 'readOnly', networkAccess: false }
           : { type: 'workspaceWrite', writableRoots: [cwd], networkAccess: false,
             excludeSlashTmp: true, excludeTmpdirEnvVar: true }, input: [{ type: 'text', text: prompt }] });
+      } catch (error) { if (error.requestRejected) task.turnRejected = true; throw error; }
       if (typeof turn?.turn?.id !== 'string') throw new Error('codexProtocol');
       if (this.active === task) {
         if (task.turnId && task.turnId !== turn.turn.id) throw new Error('codexProtocol');
         task.turnId = turn.turn.id;
+        this.phase('phaseRunning');
         if (task.cancelRequested) await this.interrupt();
       }
-    } catch (error) { this.failure = error.message; this.finish('unknown'); this.stop(); }
+    } catch (error) {
+      this.failure = safeFailure(error.message);
+      this.finish(!this.turnRequested || task.turnRejected ? 'failed' : 'unknown'); this.stop();
+    }
     return completion;
   }
   async interrupt() {
@@ -174,12 +218,15 @@ class CodexSession extends EventEmitter {
     const task = this.active; if (!task) return;
     for (const entry of this.requests.values()) clearTimeout(entry.timer);
     this.requests.clear(); this.active = undefined; this.emit('approvalsChanged');
-    task.resolve({ status, output: task.output, threadId: task.threadId, turnId: task.turnId });
+    if (status === 'completed' || status === 'cancelled') this.failure = undefined;
+    task.resolve({ status, output: task.output, threadId: task.threadId, turnId: task.turnId,
+      error: this.failure, phase: this.currentPhase });
   }
-  stop() {
+  stop(reason) {
     if (this.closed) return; this.closed = true;
-    this.finish('unknown');
-    for (const request of this.pending.values()) { clearTimeout(request.timer); request.reject(new Error('codexDisconnected')); }
+    if (reason || this.active) this.failure ||= safeFailure(reason || 'codexDisconnected');
+    this.finish(this.active && !this.turnRequested ? 'failed' : 'unknown');
+    for (const request of this.pending.values()) { clearTimeout(request.timer); request.reject(new Error(this.failure || 'codexDisconnected')); }
     this.pending.clear(); this.buffer = '';
     if (this.child && this.child.exitCode === null && this.child.pid) {
       if (process.platform === 'win32' && process.env.SystemRoot) {
@@ -190,4 +237,4 @@ class CodexSession extends EventEmitter {
     this.emit('closed');
   }
 }
-module.exports = { CodexSession, CODEX_VERSION };
+module.exports = { CodexSession, CODEX_VERSION, CODEX_ERRORS, CODEX_PHASES };

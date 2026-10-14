@@ -5,14 +5,14 @@ const net = require('node:net');
 const os = require('node:os');
 const { createHash, randomBytes, timingSafeEqual } = require('node:crypto');
 const { QqClient } = require('./qq-client');
-const { CodexSession } = require('./codex-session');
+const { CodexSession, CODEX_ERRORS, CODEX_PHASES } = require('./codex-session');
 const { SECRET_KEY, validProject, validSender, readiness } = require('./setup-model');
 const JOURNAL_KEY = 'codexAnyDevice.direct.v1';
 const ACTIVE = new Set(['starting', 'running', 'waitingApproval', 'cancelling']);
 const digest = value => createHash('sha256').update(value).digest('hex');
 const ERRORS = new Set(['qqDenied', 'qqNetwork', 'qqProtocol', 'qqEndpoint', 'qqShards', 'qqRuntime',
   'qqEndpointTransport', 'qqEndpointHost', 'qqEndpointPath', 'qqEndpointOptions',
-  'codexMissing', 'codexUnsupported', 'codexUnsupportedRequest', 'codexPolicy', 'configurationChanged', 'storageFailed']);
+  ...CODEX_ERRORS, 'configurationChanged', 'storageFailed']);
 
 // OS-owned loopback reservation: no control API, credentials, data or stale lock files.
 function reserveBot(appId) {
@@ -33,6 +33,8 @@ function journal(input) {
   const last = input?.last && /^[a-f0-9]{12}$/.test(input.last.id)
     ? { id: input.last.id, status: ACTIVE.has(input.last.status) ? 'unknown'
       : ['completed', 'failed', 'cancelled', 'unknown'].includes(input.last.status) ? input.last.status : 'unknown' } : undefined;
+  if (last && ERRORS.has(input.last.error)) last.error = input.last.error;
+  if (last && CODEX_PHASES.includes(input.last.phase)) last.phase = input.last.phase;
   return { seen, floor, last };
 }
 
@@ -62,7 +64,8 @@ class DirectController {
   now() { return (this.options.now || Date.now)(); }
   snapshot() {
     return { status: this.status, paired: Boolean(this.allowed), task: this.data.last,
-      busy: Boolean(this.task), deliveryFailed: this.deliveryFailed, error: this.error,
+      busy: Boolean(this.task), deliveryFailed: this.deliveryFailed, error: this.error || this.data.last?.error,
+      phase: this.currentPhase || this.data.last?.phase,
       hasResult: Boolean(this.output), readOnly: this.readOnly,
       pairingCode: this.pairing && this.now() < this.pairing.expires ? this.pairing.code : undefined };
   }
@@ -70,6 +73,13 @@ class DirectController {
     const value = JSON.parse(JSON.stringify(this.data));
     this.saves = this.saves.catch(() => {}).then(() => this.context.globalState.update(JOURNAL_KEY, value));
     try { await this.saves; } catch { throw new Error('storageFailed'); }
+  }
+  taskStatus(task = this.data.last) {
+    if (!task) return this.t.noTask;
+    return this.t.phoneStatus + task.id + ' \u00b7 ' + this.t[task.status]
+      + (task.phase && (task.error || task.status === 'unknown') ? '\n' + this.t.taskPhase + this.t[task.phase] : '')
+      + (task.error ? '\n' + this.t.taskReason + this.t[task.error]
+        : task.status === 'unknown' ? '\n' + this.t.taskUnknownNote : '');
   }
   async project() {
     const current = this.store.read();
@@ -172,14 +182,15 @@ class DirectController {
     if (await this.duplicate(message) || !this.valid(epoch)) return;
     await this.project(); if (!this.valid(epoch)) return;
     if (message.text === '/status') {
-      await this.reply(message, this.data.last ? this.t.phoneStatus + this.data.last.id + ' \u00b7 ' + this.t[this.data.last.status] : this.t.noTask, epoch);
+      await this.reply(message, this.taskStatus(), epoch);
     } else if (message.text === '/cancel') {
       if (this.task) { await this.cancel(); await this.reply(message, this.t.phoneCancelling, epoch); }
       else await this.reply(message, this.t.noTask, epoch);
     } else if (message.text.startsWith('/new ') && message.text.slice(5).trim()) {
       if (this.task) { await this.reply(message, this.t.phoneBusy, epoch); return; }
       const operation = { id: randomBytes(6).toString('hex'), status: 'starting', cancelRequested: false };
-      this.task = operation; this.data.last = { id: operation.id, status: 'starting' }; this.output = ''; this.error = undefined; this.readOnly = undefined;
+      this.task = operation; this.data.last = { id: operation.id, status: 'starting' }; this.output = ''; this.error = undefined;
+      this.currentPhase = undefined; this.readOnly = undefined;
       try { await this.persist(); } catch (error) { this.task = undefined; this.data.last.status = 'unknown'; throw error; }
       this.changed(); await this.reply(message, this.t.phoneAccepted + operation.id, epoch);
       void this.execute(operation, message.text.slice(5).trim(), message, epoch);
@@ -194,6 +205,11 @@ class DirectController {
       if (!this.valid(epoch, operation)) return;
       session = (this.options.createSession || (spec => new CodexSession(spec)))(this.spec);
       this.session = session;
+      session.on('phase', phase => {
+        if (this.valid(epoch, operation) && CODEX_PHASES.includes(phase)) {
+          this.currentPhase = phase; this.data.last.phase = phase; this.changed();
+        }
+      });
       session.on('policy', policy => {
         if (this.valid(epoch, operation)) { this.readOnly = policy.readOnly; this.changed(); }
       });
@@ -205,32 +221,37 @@ class DirectController {
       session.on('approvalsChanged', () => {
         if (!this.valid(epoch, operation) || operation.cancelRequested || session.closed || !session.active) return;
         operation.status = session.requests.size ? 'waitingApproval' : 'running';
-        this.data.last = { id: operation.id, status: operation.status }; this.changed();
+        this.data.last = { id: operation.id, status: operation.status, phase: this.currentPhase }; this.changed();
       });
       await session.start(selected.project.path);
       if (!this.valid(epoch, operation)) return;
       if (operation.cancelRequested) { result.status = 'cancelled'; return; }
       await this.project();
-      operation.status = 'running'; this.data.last = { id: operation.id, status: 'running' }; await this.persist();
+      operation.status = 'running'; this.data.last = { id: operation.id, status: 'running', phase: this.currentPhase }; await this.persist();
       if (!this.valid(epoch, operation)) return;
       if (operation.cancelRequested) { result.status = 'cancelled'; return; }
       this.changed(); result = await session.execute(prompt, selected.project.path);
-      if (session.failure) this.error = ERRORS.has(session.failure) ? session.failure : 'operationFailed';
+      if (this.valid(epoch, operation) && session.failure) this.error = ERRORS.has(session.failure) ? session.failure : 'codexTaskFailed';
     } catch (error) {
-      if (epoch === this.epoch) this.error = ERRORS.has(error.message) ? error.message : 'operationFailed';
+      if (this.valid(epoch, operation)) {
+        this.error = ERRORS.has(error.message) ? error.message : 'codexRequestFailed';
+        if (!session?.turnRequested) result.status = 'failed';
+      }
     } finally {
       session?.stop();
       if (this.session === session) this.session = undefined;
       if (this.task === operation && epoch === this.epoch) {
         clearTimeout(this.cancelTimer);
         const completed = { id: operation.id, status: result.status };
+        if (ERRORS.has(this.error)) completed.error = this.error;
+        if (CODEX_PHASES.includes(this.currentPhase)) completed.phase = this.currentPhase;
         this.data.last = completed; this.task = undefined; this.output = result.output || '';
         try { await this.persist(); } catch {
           completed.status = 'unknown';
-          if (this.data.last === completed && epoch === this.epoch) this.error = 'storageFailed';
+          if (this.data.last === completed && epoch === this.epoch) { this.error = 'storageFailed'; completed.error = 'storageFailed'; }
         }
         this.changed();
-        await this.reply(source, this.t.phoneStatus + operation.id + ' \u00b7 ' + this.t[completed.status]
+        await this.reply(source, this.taskStatus(completed)
           + (result.output ? '\n\n' + result.output.slice(0, 1400) + (result.output.length > 1400 ? '\n' + this.t.phoneLongResult : '') : ''), epoch);
       }
     }
@@ -255,7 +276,7 @@ class DirectController {
     this.data.last = { id: operation.id, status: 'cancelling' }; this.changed();
     const session = this.session;
     clearTimeout(this.cancelTimer);
-    this.cancelTimer = setTimeout(() => { if (this.task === operation) session?.stop(); }, 10000);
+    this.cancelTimer = setTimeout(() => { if (this.task === operation) session?.stop('codexTimeout'); }, 10000);
     // The native interrupt must not wait for storage or a slow RPC acknowledgement.
     if (session) void session.interrupt().catch(() => session.stop());
     await this.persist();
@@ -267,12 +288,13 @@ class DirectController {
     const session = this.session; this.session = undefined;
     const operation = this.task; this.task = undefined; this.selected = undefined; this.spec = undefined;
     this.qq.stop(); this.status = state; session?.stop();
-    if (operation) this.data.last = { id: operation.id, status: 'unknown' };
+    if (operation) this.data.last = { id: operation.id, status: 'unknown', error: 'codexDisconnected', phase: this.currentPhase };
     try { if (operation) await this.persist(); }
     finally { if (release) await release(); this.changed(); }
   }
   async clear() {
-    await this.disconnect(); this.data = { seen: [], floor: this.now(), last: undefined }; this.output = ''; await this.persist();
+    await this.disconnect(); this.data = { seen: [], floor: this.now(), last: undefined }; this.output = '';
+    this.error = undefined; this.currentPhase = undefined; await this.persist();
   }
   dispose() { void this.disconnect().catch(() => {}); }
 }

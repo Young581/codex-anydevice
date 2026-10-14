@@ -1,6 +1,6 @@
 # QQ 官方直连原型与证据
 
-0.3.1 实现 **QQ 官方 WebSocket → AnyDevice → 本机 Codex app-server**，无需 OpenClaw 或公网回调。真实账号权限、手机与模型执行待验收。
+0.3.2 实现 **QQ 官方 WebSocket → AnyDevice → 本机 Codex app-server**，无需 OpenClaw 或公网回调。真实账号权限、手机与模型执行待验收。
 
 ## 2026-10-14 核对
 
@@ -37,6 +37,12 @@
 据此补充两个确切主机的 `/websocket` 接入点，不扩展为 QQ 域名通配。token/REST 继续使用当前文档的 `api.bot.qq.com`，未加入 sandbox、多分片、压缩或任意查询参数支持。地址拒绝仅给出固定类别，不保留完整地址。未读取用户实际 Gateway 返回值，因此尚不能断言该用户的地址具体是哪一种；实际连接需安装补丁后验收。
 
 ## 验收
+
+### 0.3.2 任务失败处理核对 — 2026-10-14
+
+重新获取 [OpenAI App Server](https://learn.chatgpt.com/docs/app-server.md) 与[配置参考](https://learn.chatgpt.com/docs/config-file/config-reference.md)，并检查 0.162.0-alpha.17.2 的 ErrorNotification、TurnError、CodexErrorInfo 和输入 schema。该版本错误枚举的 wire 名称为 camelCase，HTTP 401 位于 `httpConnectionFailed.httpStatusCode`；通知有 `willRetry`，最终错误位于 `turn/completed` 的 `turn.error`。不把网页展示的 PascalCase 直接作为 wire 名称。
+
+使用全新 CODEX_HOME、合成项目及只含合成账号的 loopback Responses 服务，原生初始化、新线程、轮次提交和正常完成通过；本机模拟 HTTP 401 返回原生 failed，映射为固定 authentication 类别，不展示原始正文。没有真实模型请求或真实账号访问；这些结果不能确定用户这次中断的真实原因。
 
 按[使用说明](setup.md)在无秘密项目连接、配对，用 `/new` 读取 README，再验收一个写文件任务。分别记录 ChatGPT 和 API Key 的实际请求，自定义服务商另行核验。检查本人/非法身份、群聊、重复消息、过期配对、电脑拒绝、取消、断网恢复、重载未知状态、过期/已解决审批与多窗口占用。
 

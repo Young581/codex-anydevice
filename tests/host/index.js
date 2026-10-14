@@ -8,7 +8,7 @@ const path = require('node:path');
 async function run() {
   const extension = vscode.extensions.getExtension('Young581.codex-anydevice');
   assert.ok(extension, 'Extension is installed in the isolated host');
-  assert.equal(extension.packageJSON.version, '0.3.1');
+  assert.equal(extension.packageJSON.version, '0.3.2');
   assert.equal(extension.packageJSON.contributes.configuration.properties['codexAnyDevice.openclawPath'], undefined);
   if (process.env.ANYDEVICE_HOST_EXPECT_EXTENSION_PATH) {
     assert.equal(await fs.realpath(extension.extensionPath),
@@ -44,7 +44,14 @@ async function run() {
   assert.equal(JSON.parse(preview).plannedAuthorization.approvalLocation, 'desktop');
   assert.doesNotMatch(preview, /synthetic-host-secret/);
   await controller.openDocument('docs/setup.md');
-  assert.match(vscode.window.activeTextEditor.document.getText(), /0\.3\.1/);
+  assert.match(vscode.window.activeTextEditor.document.getText(), /0\.3\.2/);
+  const { DirectController } = require(path.join(extension.extensionPath, 'extension/lib/direct-controller'));
+  controller.direct.data.last = { id: 'aaaaaaaaaaaa', status: 'unknown', error: 'codexProtocol', phase: 'phaseTurn' };
+  await controller.direct.persist();
+  const restored = new DirectController(vscode, controller.context, controller.store, controller.t);
+  assert.equal(restored.snapshot().error, 'codexProtocol'); assert.equal(restored.snapshot().phase, 'phaseTurn');
+  assert.match(restored.taskStatus(), /protocol/); await restored.disconnect();
+  await controller.refresh();
   controller.direct.output = 'Synthetic latest agent output';
   await controller.act('showResult');
   assert.equal(vscode.window.activeTextEditor.document.getText(), 'Synthetic latest agent output');
@@ -78,10 +85,11 @@ async function run() {
     }
   }
   await fs.writeFile(process.env.ANYDEVICE_HOST_REPORT, JSON.stringify({
-    passed: 12, checks: ['real activation', 'commands', 'one webview and CSP',
+    passed: 13, checks: ['real activation', 'commands', 'one webview and CSP',
       'SecretStorage and metadata', 'secret-free preview', 'bundled guide', 'clear state',
       'bundled identity guide without credentials', 'synthetic API authentication summary',
-      'direct commands without automatic connection', 'manual metadata without verified pairing', 'explicit latest result document'],
+      'direct commands without automatic connection', 'manual metadata without verified pairing', 'explicit latest result document',
+      'allowlisted task diagnosis loaded from real globalState without a connection'],
   }, null, 2));
 }
 

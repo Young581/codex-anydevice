@@ -1,6 +1,6 @@
 # 架构与控制边界
 
-0.3.1 已实现个人 QQ 官方 WebSocket 与 Codex 新线程原型，实际账号、手机与模型任务待验收。
+0.3.2 已实现个人 QQ 官方 WebSocket 与 Codex 新线程原型，实际账号、手机与模型任务待验收。
 
 ```mermaid
 flowchart LR
@@ -35,7 +35,7 @@ flowchart LR
 
 消息队列最多 32，执行独立于队列，运行中可响应状态/取消。一个控制器一个活跃任务，一个新线程一个写入者。执行前持久保存 SHA-256(AppID、sender、messageID)，最多 512 条；淘汰推进时间截断，旧事件保守拒绝。保存失败停止接收；重启活跃状态为 unknown，不重放。该日志不是文件事务或恰好一次执行保证。
 
-日志仅含哈希、时间、最近随机任务 ID/状态，无原始身份、目录、prompt、结果或 native IDs。状态为 starting/running/waitingApproval/cancelling/completed/failed/cancelled/unknown；中断确认前不宣称取消或回滚完成。
+日志仅含哈希、时间、最近随机任务 ID/状态，以及白名单中的错误类别和任务阶段，无原始身份、目录、prompt、结果、原始错误正文或 native IDs。状态为 starting/running/waitingApproval/cancelling/completed/failed/cancelled/unknown；中断确认前不宣称取消或回滚完成。明确尚未发起 turn/start 或收到该请求的 JSON-RPC 拒绝可记 failed；提交后的连接中断保留 unknown。
 
 ## 原生策略与审批
 
@@ -43,7 +43,7 @@ flowchart LR
 
 请求精确绑定 requestId/threadId/turnId/itemId 与原生 startedAtMs，最多 2 分钟。电脑显示完整有界请求，仅 accept/decline，不自动审批、会话批准或持久规则。已解决、过期、结束、取消、配置变化的窗口不能允许其他请求。
 
-缺少内容的文件审批、会话 grantRoot、终端输入、权限工具、动态工具、MCP elicitation 与提问等未实现请求拒绝或停止，不伪装成功。结果仅取 agentMessage 完成事件，最新最多 20,000 字符留内存，QQ 返回摘要，失败在桌面显示。
+缺少内容的文件审批、会话 grantRoot、终端输入、权限工具、动态工具、MCP elicitation 与提问等未实现请求拒绝或停止，不伪装成功。结果仅取 agentMessage 完成事件，最新最多 20,000 字符留内存，QQ 返回摘要。固定诊断阶段为版本、初始化、线程、轮次提交及等待结果；error 和 turn/completed 的 codexErrorInfo 只映射为固定类别，不保存 message/additionalDetails。重试中的通知不提前终止任务。失败类别与阶段在桌面、QQ 最终回复和 /status 中显示，重载后从匿名记录恢复；旧执行的诊断也核对 epoch 与 operation。
 
 ## 渠道边界
 

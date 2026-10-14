@@ -237,7 +237,7 @@ test('Codex rejects unsupported versions and effective policy mismatches before 
     if (message.method !== 'thread/start') return;
     emit({ id: message.id, result: { thread: { id: 'synthetic' }, approvalPolicy: 'never', approvalsReviewer: 'auto_review', sandbox: { type: 'dangerFullAccess' } } }); return false;
   } });
-  await f.session.start(f.cwd); assert.equal((await f.session.execute('synthetic', f.cwd)).status, 'unknown');
+  await f.session.start(f.cwd); assert.equal((await f.session.execute('synthetic', f.cwd)).status, 'failed');
   assert.equal(f.session.failure, 'codexPolicy'); assert.equal(f.writes.some(message => message.method === 'turn/start'), false);
 });
 
@@ -295,6 +295,66 @@ test('Codex interrupt targets the active turn and rejects its pending approval',
   assert.deepEqual(f.writes.at(-1).params, { threadId: 'thread_synthetic', turnId: 'turn_synthetic' });
   f.emit({ method: 'turn/completed', params: { threadId: 'thread_synthetic', turn: { id: 'turn_synthetic', status: 'interrupted' } } });
   assert.equal((await done).status, 'cancelled');
+});
+
+test('Codex distinguishes explicit pre-turn rejection from an uncertain transport loss', async t => {
+  for (const method of ['thread/start', 'turn/start']) {
+    const f = nativeFixture(t, { respond(message, emit) {
+      if (message.method !== method) return;
+      emit({ id: message.id, error: { code: -32602, message: 'synthetic-private-server-value' } }); return false;
+    } });
+    await f.session.start(f.cwd); const result = await f.session.execute('synthetic', f.cwd);
+    assert.equal(result.status, 'failed'); assert.equal(result.error, 'codexRequestParams');
+    assert.equal(result.phase, method === 'thread/start' ? 'phaseThread' : 'phaseTurn');
+    assert.doesNotMatch(JSON.stringify(result), /synthetic-private-server-value/);
+    assert.equal(f.writes.some(message => message.method === 'turn/start'), method === 'turn/start');
+  }
+  const f = nativeFixture(t); await f.session.start(f.cwd); const done = f.session.execute('synthetic', f.cwd); await tick();
+  f.emit({ method: 'error', params: { threadId: 'wrong-thread', turnId: 'turn_synthetic', willRetry: false,
+    error: { message: 'private', codexErrorInfo: 'unauthorized' } } });
+  f.session.child.emit('exit', 1);
+  const result = await done; assert.equal(result.status, 'unknown');
+  assert.equal(result.error, 'codexExited'); assert.equal(result.phase, 'phaseRunning');
+});
+
+test('Codex startup and malformed protocol failures carry a safe stage and category', async t => {
+  const startup = nativeFixture(t, { respond(message) {
+    if (message.method === 'initialize') return false;
+  } });
+  const start = startup.session.start(startup.cwd); await tick(); startup.session.child.emit('error', new Error('synthetic-private-path'));
+  await assert.rejects(start, { message: 'codexSpawnFailed' });
+  assert.equal(startup.session.currentPhase, 'phaseInitialize');
+  const f = nativeFixture(t); await f.session.start(f.cwd); const done = f.session.execute('synthetic', f.cwd); await tick();
+  f.session.child.stdout.write('synthetic-invalid-json\n');
+  const result = await done; assert.equal(result.status, 'unknown');
+  assert.equal(result.error, 'codexProtocol'); assert.equal(result.phase, 'phaseRunning');
+});
+
+test('Codex maps structured model failures without exposing native error bodies', async t => {
+  for (const [info, expected] of [
+    [{ httpConnectionFailed: { httpStatusCode: 401 } }, 'codexAuth'],
+    [{ responseStreamConnectionFailed: { httpStatusCode: 403 } }, 'codexAuth'],
+    [{ httpConnectionFailed: { httpStatusCode: 429 } }, 'codexLimit'],
+    ['usageLimitExceeded', 'codexLimit'],
+    [{ responseStreamDisconnected: { httpStatusCode: 503 } }, 'codexProvider'],
+    ['sandboxError', 'codexSandbox'], ['synthetic-private-class', 'codexTaskFailed'],
+  ]) {
+    const f = nativeFixture(t); await f.session.start(f.cwd); const done = f.session.execute('synthetic', f.cwd); await tick();
+    const error = { message: 'synthetic-private-error', additionalDetails: 'synthetic-private-address', codexErrorInfo: info };
+    f.emit({ method: 'error', params: { threadId: 'thread_synthetic', turnId: 'turn_synthetic', willRetry: false, error } });
+    f.emit({ method: 'turn/completed', params: { threadId: 'thread_synthetic', turn: { id: 'turn_synthetic', status: 'failed', error } } });
+    const result = await done; assert.equal(result.status, 'failed'); assert.equal(result.error, expected);
+    assert.doesNotMatch(JSON.stringify(result), /synthetic-private/);
+  }
+});
+
+test('a retrying native error does not turn a recovered task into a failure', async t => {
+  const f = nativeFixture(t); await f.session.start(f.cwd); const done = f.session.execute('synthetic', f.cwd); await tick();
+  f.emit({ method: 'error', params: { threadId: 'thread_synthetic', turnId: 'turn_synthetic', willRetry: true,
+    error: { message: 'private', codexErrorInfo: { responseStreamDisconnected: { httpStatusCode: 503 } } } } });
+  assert.equal(f.session.failure, undefined);
+  f.emit({ method: 'turn/completed', params: { threadId: 'thread_synthetic', turn: { id: 'turn_synthetic', status: 'completed' } } });
+  const result = await done; assert.equal(result.status, 'completed'); assert.equal(result.error, undefined);
 });
 
 class FakeQQ extends EventEmitter {
@@ -382,6 +442,34 @@ test('terminal QQ failure revokes pairing, marks unknown and releases ownership'
   f.qq.emit('state', 'qqDenied'); await tick(); await tick();
   assert.equal(f.direct.snapshot().paired, false); assert.equal(f.direct.snapshot().task.status, 'unknown');
   assert.equal(f.direct.status, 'qqDenied'); assert.equal(f.sessions[0].closed, true); assert.equal(f.releases, 1);
+});
+
+test('task failure reaches QQ and the desktop, survives reload, and clears for a new task', async t => {
+  const f = await directFixture(t); await f.pair(); await f.send('/new synthetic'); const session = f.sessions[0];
+  session.emit('phase', 'phaseRunning'); session.failure = 'codexAuth'; session.finish('failed');
+  await until(() => !f.direct.task && f.qq.replies.at(-1)?.text.includes(en.codexAuth));
+  assert.equal(f.direct.snapshot().error, 'codexAuth'); assert.equal(f.direct.snapshot().phase, 'phaseRunning');
+  const stored = journal(f.data.get(JOURNAL_KEY)); assert.equal(stored.last.error, 'codexAuth');
+  assert.equal(stored.last.phase, 'phaseRunning');
+  await f.send('/status'); assert.match(f.qq.replies.at(-1).text, /authentication/);
+  await f.direct.disconnect();
+  const restored = new DirectController(f.api, f.context, f.store, en, { qq: new FakeQQ() });
+  assert.equal(restored.snapshot().error, 'codexAuth'); assert.equal(restored.snapshot().task.status, 'failed');
+  t.after(() => restored.dispose());
+  const untrusted = journal({ last: { id: stored.last.id, status: 'failed', error: 'synthetic-private-error', phase: 'synthetic-private-path' } });
+  assert.equal(untrusted.last.error, undefined); assert.equal(untrusted.last.phase, undefined);
+  f.warnings.push(en.connectAllow); await f.direct.connect({ file: '/synthetic/codex', prefix: [] }); await f.pair();
+  await f.send('/new next'); assert.equal(f.direct.snapshot().error, undefined); assert.equal(f.direct.snapshot().phase, undefined);
+});
+
+test('late failure from an old task cannot overwrite a replacement task diagnostic', async t => {
+  const f = await directFixture(t); await f.pair(); await f.send('/new old'); const old = f.sessions[0];
+  old.stop = () => { old.closed = true; };
+  await f.direct.disconnect(); f.warnings.push(en.connectAllow); await f.direct.connect({ file: '/synthetic/codex', prefix: [] });
+  await f.pair(); await f.send('/new current'); const current = f.sessions[1];
+  current.emit('phase', 'phaseTurn'); old.failure = 'codexProtocol'; old.finish('unknown'); await tick();
+  assert.equal(f.direct.session, current); assert.equal(f.direct.snapshot().error, undefined);
+  assert.equal(f.direct.snapshot().phase, 'phaseTurn'); assert.equal(f.direct.snapshot().task.status, 'running');
 });
 
 test('changing project or losing trust prevents a native approval answer', async t => {

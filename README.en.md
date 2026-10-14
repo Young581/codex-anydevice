@@ -4,7 +4,7 @@
 
 Start local Codex tasks from your phone through an official QQ bot. Choose one project, pair your QQ and review Codex approvals in VS Code. For personal use; no OpenClaw dependency. Community project, not an official OpenAI, Tencent or Microsoft product.
 
-**0.3.1 is an official QQ WebSocket prototype.** It implements connection, one-time pairing codes with desktop confirmation, `/new`, `/status`, `/cancel`, result delivery and desktop approvals. Synthetic validation is separate from actual bot eligibility, phone messaging and model execution, which still need acceptance. No Marketplace or formal Release publication exists.
+**0.3.2 is an official QQ WebSocket prototype.** It implements connection, one-time pairing codes with desktop confirmation, `/new`, `/status`, `/cancel`, result delivery and desktop approvals. Synthetic validation is separate from actual bot eligibility, phone messaging and model execution, which still need acceptance. No Marketplace or formal Release publication exists.
 
 Save bot credentials using the native password box and SecretStorage, select a trusted local project, then click **Connect QQ**. Once connected, click **Start pairing**, send the displayed `/pair CODE` in your own QQ private chat and confirm on the computer. OpenID is obtained automatically; manually recorded metadata does not authorize tasks. Send `/new Read README and summarize the project without modifying files` for the first synthetic-project smoke test. Use `/status` and `/cancel`; native approval requests stay on the computer.
 

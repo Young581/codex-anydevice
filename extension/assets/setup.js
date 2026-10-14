@@ -56,8 +56,10 @@ function update(model) {
   byId('showResult').disabled = model.busy || !direct.hasResult;
   byId('pairBox').hidden = !direct.pairingCode;
   byId('pairingCode').textContent = direct.pairingCode ? '/pair ' + direct.pairingCode : '';
-  byId('taskState').textContent = direct.task ? t.phoneStatus + direct.task.id + ' · ' + (t[direct.task.status] || t.unknown) : t.noTask;
-  byId('directError').textContent = direct.error ? t[direct.error] || t.operationFailed : '';
+  byId('taskState').textContent = direct.task ? t.phoneStatus + direct.task.id + ' · ' + (t[direct.task.status] || t.unknown)
+    + (direct.phase ? ' · ' + (t[direct.phase] || '') : '') : t.noTask;
+  byId('directError').textContent = direct.error ? t[direct.error] || t.operationFailed
+    : direct.task?.status === 'unknown' ? t.taskUnknownNote : '';
   byId('deliveryState').textContent = direct.deliveryFailed ? t.deliveryFailed : '';
   byId('sandboxState').textContent = direct.readOnly ? t.codexReadOnly : '';
   byId('check').textContent = model.busy ? t.checking : t.check;
