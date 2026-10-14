@@ -11,7 +11,7 @@ const { CodexSession, CODEX_VERSION } = require('../extension/lib/codex-session'
 const { DirectController, JOURNAL_KEY, journal, reserveBot } = require('../extension/lib/direct-controller');
 const { SetupStore } = require('../extension/lib/setup-model');
 const { SetupController } = require('../extension/lib/setup-controller');
-const { en } = require('../extension/lib/strings');
+const { zh, en } = require('../extension/lib/strings');
 const { host } = require('./helpers');
 const tick = () => new Promise(done => setImmediate(done));
 async function until(predicate) {
@@ -46,6 +46,14 @@ function ready(qq) {
   socket.receive({ op: 10, d: { heartbeat_interval: 30000 } });
   socket.receive({ op: 0, t: 'READY', s: 1, d: { session_id: 'synthetic_session' } });
   return socket;
+}
+function gatewayFixture(t, gateway) {
+  return qqFixture(t, { fetch: async (url, options) => {
+    assert.ok(url.startsWith(API + '/'), 'REST credentials stay on the API origin');
+    assert.equal(options.redirect, 'error');
+    return { ok: true, text: async () => JSON.stringify(url.endsWith('getAppAccessToken')
+      ? { access_token: 'synthetic_token', expires_in: 7200 } : gateway) };
+  } });
 }
 
 test('QQ uses official token, C2C intent and bounded passive replies', async t => {
@@ -89,21 +97,81 @@ test('QQ resumes sequence, ignores stale fatal closes and stops after retry boun
   assert.equal(f.qq.status, 'qqNetwork'); assert.equal(f.qq.secret, undefined);
 });
 
-test('QQ refuses credential redirects, unverified WSS hosts and multiple shards', async t => {
-  for (const gateway of [{ url: 'wss://synthetic.invalid/websocket/' }, { url: 'wss://api.bot.qq.com/websocket/?token=synthetic' },
-    { url: 'wss://api.bot.qq.com/websocket/', shards: 2 }]) {
-    const f = qqFixture(t, { fetch: async (url, options) => {
-      assert.equal(options.redirect, 'error');
-      return { ok: true, text: async () => JSON.stringify(url.endsWith('getAppAccessToken')
-        ? { access_token: 'synthetic', expires_in: 7200 } : gateway) };
-    } });
-    await assert.rejects(f.qq.start(appId, 'synthetic_secret'), /qqEndpoint|qqShards/);
+test('QQ connects to the exact gateway hosts from Tencent docs and official SDK tests', async t => {
+  for (const hostname of ['api.bot.qq.com', 'api.sgroup.qq.com']) {
+    for (const suffix of ['/websocket', '/websocket/']) {
+      const url = 'wss://' + hostname + suffix;
+      const f = gatewayFixture(t, { url, shards: 1 });
+      await f.qq.start(appId, 'synthetic_secret'); const socket = ready(f.qq);
+      assert.equal(socket.url, url); assert.equal(f.qq.status, 'connected');
+      assert.equal(socket.sent[0].d.token, 'QQBot synthetic_token');
+      f.qq.stop();
+    }
+  }
+});
+
+test('QQ refuses credential redirects, unsafe gateway variants and multiple shards before any socket', async t => {
+  const variants = [
+    ['wss://synthetic.invalid/websocket/', 'qqEndpointHost'],
+    ['wss://api.sgroup.qq.com.synthetic.invalid/websocket', 'qqEndpointHost'],
+    ['wss://synthetic.api.sgroup.qq.com/websocket', 'qqEndpointHost'],
+    ['wss://api.bot.qq.com.synthetic.invalid/websocket', 'qqEndpointHost'],
+    ['wss://sandbox.api.sgroup.qq.com/websocket', 'qqEndpointHost'],
+    ['wss://127.0.0.1/websocket', 'qqEndpointHost'],
+    ['ws://api.sgroup.qq.com/websocket', 'qqEndpointTransport'],
+    ['https://api.bot.qq.com/websocket', 'qqEndpointTransport'],
+    ['wss://synthetic:private@api.sgroup.qq.com/websocket', 'qqEndpointTransport'],
+    ['wss://api.bot.qq.com:8443/websocket', 'qqEndpointTransport'],
+    ['wss://api.sgroup.qq.com/other', 'qqEndpointPath'],
+    ['wss://api.bot.qq.com/websocket/extra', 'qqEndpointPath'],
+    ['wss://api.sgroup.qq.com/%77ebsocket', 'qqEndpointPath'],
+    ['wss://api.bot.qq.com/websocket/?token=synthetic', 'qqEndpointOptions'],
+    ['wss://api.sgroup.qq.com/websocket?compress=true', 'qqEndpointOptions'],
+    ['wss://api.sgroup.qq.com/websocket#synthetic', 'qqEndpointOptions'],
+  ].map(([url, error]) => [{ url }, error]);
+  variants.push([{ url: 'wss://api.sgroup.qq.com/websocket', shards: 2 }, 'qqShards']);
+  for (const [gateway, error] of variants) {
+    const f = gatewayFixture(t, gateway); const sockets = Socket.instances.length;
+    await assert.rejects(f.qq.start(appId, 'synthetic_secret'), { message: error });
+    assert.equal(Socket.instances.length, sockets, 'No WebSocket or Identify to an unsafe address');
+    assert.equal(f.qq.socket, undefined); assert.equal(f.qq.token, undefined);
     assert.equal(f.qq.secret, undefined);
+    assert.equal(f.qq.stopped, true);
   }
   const f = qqFixture(t, { fetch: async (_url, options) => {
     assert.equal(options.redirect, 'error'); throw new Error('synthetic redirect rejection');
   } });
   await assert.rejects(f.qq.start(appId, 'synthetic_secret')); assert.equal(f.qq.stopped, true);
+});
+
+test('setup reports only gateway rejection categories in both languages and releases the bot', async t => {
+  const folder = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'anydevice-gateway-')));
+  t.after(() => fs.rmSync(folder, { recursive: true, force: true }));
+  const cases = [
+    ['ws://api.bot.qq.com/websocket', 'qqEndpointTransport'],
+    ['wss://synthetic.invalid/websocket', 'qqEndpointHost'],
+    ['wss://api.sgroup.qq.com/private-synthetic-path', 'qqEndpointPath'],
+    ['wss://api.sgroup.qq.com/websocket?token=synthetic-private-value', 'qqEndpointOptions'],
+  ];
+  for (const [language, strings] of [['zh-cn', zh], ['en', en]]) {
+    for (const [url, error] of cases) {
+      const h = host(language); const f = gatewayFixture(t, { url }); let releases = 0;
+      const controller = new SetupController(h.api, h.context, {
+        resolveCodex: async () => ({ file: '/synthetic/codex', prefix: [] }),
+        direct: { qq: f.qq, reserve: async () => async () => { releases++; } },
+      });
+      t.after(() => controller.dispose());
+      await controller.store.saveBot(appId, 'synthetic_secret');
+      await controller.store.saveProject({ name: 'synthetic', path: folder });
+      h.warnings.push(strings.connectAllow); await controller.act('connect');
+      assert.equal(controller.notice, strings[error]);
+      assert.deepEqual(h.calls.find(call => call[0] === 'error'), ['error', strings[error]]);
+      const model = await controller.model();
+      assert.equal(model.direct.status, 'disconnected'); assert.equal(model.direct.paired, false);
+      assert.equal(releases, 1); assert.equal(controller.direct.selected, undefined);
+      assert.doesNotMatch(JSON.stringify(model), /synthetic\.invalid|private-synthetic-path|synthetic-private-value|synthetic_secret/);
+    }
+  }
 });
 
 function nativeFixture(t, options = {}) {

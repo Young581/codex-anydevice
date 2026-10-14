@@ -8,7 +8,7 @@ const path = require('node:path');
 async function run() {
   const extension = vscode.extensions.getExtension('Young581.codex-anydevice');
   assert.ok(extension, 'Extension is installed in the isolated host');
-  assert.equal(extension.packageJSON.version, '0.3.0');
+  assert.equal(extension.packageJSON.version, '0.3.1');
   assert.equal(extension.packageJSON.contributes.configuration.properties['codexAnyDevice.openclawPath'], undefined);
   if (process.env.ANYDEVICE_HOST_EXPECT_EXTENSION_PATH) {
     assert.equal(await fs.realpath(extension.extensionPath),
@@ -44,7 +44,7 @@ async function run() {
   assert.equal(JSON.parse(preview).plannedAuthorization.approvalLocation, 'desktop');
   assert.doesNotMatch(preview, /synthetic-host-secret/);
   await controller.openDocument('docs/setup.md');
-  assert.match(vscode.window.activeTextEditor.document.getText(), /0\.3\.0/);
+  assert.match(vscode.window.activeTextEditor.document.getText(), /0\.3\.1/);
   controller.direct.output = 'Synthetic latest agent output';
   await controller.act('showResult');
   assert.equal(vscode.window.activeTextEditor.document.getText(), 'Synthetic latest agent output');

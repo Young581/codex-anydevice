@@ -39,7 +39,7 @@ class CodexSession extends EventEmitter {
     this.child.stderr.resume(); // Never log native stderr or credentials.
     this.child.stdin.on('error', () => this.stop());
     this.child.on('error', () => this.stop()); this.child.on('exit', () => this.stop());
-    await this.rpc('initialize', { clientInfo: { name: 'codex_anydevice', title: 'Codex AnyDevice', version: '0.3.0' } });
+    await this.rpc('initialize', { clientInfo: { name: 'codex_anydevice', title: 'Codex AnyDevice', version: '0.3.1' } });
     this.write({ method: 'initialized', params: {} });
   }
 

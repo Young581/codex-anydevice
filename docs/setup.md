@@ -1,6 +1,6 @@
 # 个人 QQ 直连配置与使用
 
-0.3.0 已接入 QQ 官方 WebSocket 与 Codex 新线程原型，不依赖 OpenClaw。真实机器人接入、手机收发及模型任务仍需验收。
+0.3.1 已接入 QQ 官方 WebSocket 与 Codex 新线程原型，不依赖 OpenClaw。真实机器人接入、手机收发及模型任务仍需验收。
 
 ## 准备电脑与机器人
 
@@ -12,7 +12,9 @@ Codex 从 PATH、Windows npm 入口或已安装 OpenAI 扩展发现，也可手�
 
 在 [QQ 开放平台](https://q.qq.com/)创建官方机器人，按后台要求允许本人测试/使用及私聊。密钥只填本机密码框，保存在 SecretStorage，不进入网页、摘要或日志。更换 AppID 清除旧身份，0.2.x 配置继续使用。
 
-QQ 文档列出 WebSocket，但账号权限以实际连接为准。仅支持核对过的官方单分片 WSS 接入点，其他域名保守拒绝；本版未实现需要 HTTPS 回调的 Webhook。
+QQ 文档列出 WebSocket，但账号权限以实际连接为准。本版支持 `api.bot.qq.com` 与腾讯官方 SDK 使用的 `api.sgroup.qq.com` 的单分片 WSS `/websocket` 接入点；其他主机、路径和附加参数保守拒绝，未实现需要 HTTPS 回调的 Webhook。
+
+若 0.3.0 显示“QQ 返回了当前未核对的连接地址”，安装 0.3.1 并重载 VS Code 后重新连接，已保存的机器人与项目配置继续使用。若仍失败，只需反馈页面中的 `transport`、`host`、`path` 或 `options` 类别，无需发送完整连接地址、参数或密钥。插件不会自动改写地址或绕过校验。
 
 ## 连接并自动取得身份
 

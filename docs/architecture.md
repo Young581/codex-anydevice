@@ -1,6 +1,6 @@
 # 架构与控制边界
 
-0.3.0 已实现个人 QQ 官方 WebSocket 与 Codex 新线程原型，实际账号、手机与模型任务待验收。
+0.3.1 已实现个人 QQ 官方 WebSocket 与 Codex 新线程原型，实际账号、手机与模型任务待验收。
 
 ```mermaid
 flowchart LR
@@ -47,6 +47,6 @@ flowchart LR
 
 ## 渠道边界
 
-腾讯文档中的 api.bot.qq.com API/WSS，拒绝重定向和未核对 gateway 地址。单分片，最多 6 次连续恢复尝试；无 ACK 重连，token 到期前刷新。错误正文不进入 UI。回复使用 msg_id/msg_seq，保守 5 分钟与最多 4 次，不盲目重试或提供主动额度回退。
+REST 与 token 固定使用腾讯文档的 `api.bot.qq.com`。Gateway 仅接受 `api.bot.qq.com`、官方 SDK 使用的 `api.sgroup.qq.com` 两个确切主机，协议为 WSS、标准端口、路径为 `/websocket` 或 `/websocket/`，无用户信息、查询参数或片段；不接受任意 QQ 子域或手填替代地址。拒绝 HTTP 凭据重定向，地址失败仅展示 transport/host/path/options 类别，不展示原地址或服务端错误正文。官方固定版本证据见[直连原型](qq-direct-poc.md)。单分片，最多 6 次连续恢复尝试；无 ACK 重连，token 到期前刷新。回复使用 msg_id/msg_seq，保守 5 分钟与最多 4 次，不盲目重试或提供主动额度回退。
 
 电脑持续运行；Webhook、多分片、微信、远程宿主和后台服务后续独立开发。`Young581.codex-anydevice`、`codexAnyDevice.*` 与存储独立，不修改 Beacon 的设置、Hook、证书或缓存。日志观察、fork、原线程续聊与运行中接管分别验收。

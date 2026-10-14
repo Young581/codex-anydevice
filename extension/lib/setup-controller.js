@@ -109,7 +109,8 @@ class SetupController {
     } catch (error) {
       const allowed = ['incomplete', 'invalidProject', 'noProject', 'botRequired', 'connectRequired', 'codexMissing',
         'codexUnsupported', 'connectionBusy', 'qqNotConnected', 'qqDenied', 'qqNetwork', 'qqProtocol',
-        'qqEndpoint', 'qqShards', 'qqRuntime', 'configurationChanged', 'storageFailed'];
+        'qqEndpoint', 'qqEndpointTransport', 'qqEndpointHost', 'qqEndpointPath', 'qqEndpointOptions',
+        'qqShards', 'qqRuntime', 'configurationChanged', 'storageFailed'];
       this.notice = allowed.includes(error.message) ? this.t[error.message] : this.t.operationFailed;
       await this.vscode.window.showErrorMessage(this.notice);
     } finally {

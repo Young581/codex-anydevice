@@ -1,6 +1,6 @@
 # QQ 官方直连原型与证据
 
-0.3.0 实现 **QQ 官方 WebSocket → AnyDevice → 本机 Codex app-server**，无需 OpenClaw 或公网回调。真实账号权限、手机与模型执行待验收。
+0.3.1 实现 **QQ 官方 WebSocket → AnyDevice → 本机 Codex app-server**，无需 OpenClaw 或公网回调。真实账号权限、手机与模型执行待验收。
 
 ## 2026-10-14 核对
 
@@ -20,6 +20,21 @@
 网页示例与 alpha 版本字符串不同，不直接复制另一版本的 unlessTrusted/workspaceWrite 到 thread/start。新增版本先生成 schema、做隔离策略与审批验收，再更新支持矩阵。
 
 原生权限降低时保留限制。官方 app-server 文档列出 windowsSandbox/setupStart，本版不调用系统设置接口；用户需通过官方 Codex 设置。单独 Windows 使用页面本轮网络超时，不作为已读取证据。
+
+## 0.3.1 网关兼容核对 — 2026-10-14
+
+再次实际获取腾讯[连接说明](https://bot.q.qq.com/wiki/develop/api-v2/dev-prepare/interface-framework/event-emit.html)和[带分片 WSS 接入点](https://bot.q.qq.com/wiki/develop/api-v2/openapi/wss/shard_url_get.html)，网页示例为 `wss://api.bot.qq.com/websocket/`；示例不是网关主机的完整列表。
+
+同步获取腾讯官方 SDK 的固定提交源码：
+
+| 来源 | 确切证据 |
+| --- | --- |
+| [botpy tests/test_api.py](https://github.com/tencent-connect/botpy/blob/e25f3e84bad7217357d8200a9d12939b58285b84/tests/test_api.py#L175) | `get_ws_url()` 的测试期望为 `wss://api.sgroup.qq.com/websocket` |
+| [botpy http.py](https://github.com/tencent-connect/botpy/blob/e25f3e84bad7217357d8200a9d12939b58285b84/botpy/http.py#L90) | 正式 API 主机为 `api.sgroup.qq.com`，sandbox 为另一个明确主机 |
+| [botgo constant.go](https://github.com/tencent-connect/botgo/blob/fe31c0dfe469001e0f783d2f07e7de7bd08b403f/constant/constant.go#L8) | 正式 API 地址为 `https://api.sgroup.qq.com` |
+| [botgo client.go](https://github.com/tencent-connect/botgo/blob/fe31c0dfe469001e0f783d2f07e7de7bd08b403f/websocket/client/client.go#L59) | 使用接口返回的 `session.URL` 建立 WebSocket，不固定成文档示例主机 |
+
+据此补充两个确切主机的 `/websocket` 接入点，不扩展为 QQ 域名通配。token/REST 继续使用当前文档的 `api.bot.qq.com`，未加入 sandbox、多分片、压缩或任意查询参数支持。地址拒绝仅给出固定类别，不保留完整地址。未读取用户实际 Gateway 返回值，因此尚不能断言该用户的地址具体是哪一种；实际连接需安装补丁后验收。
 
 ## 验收
 

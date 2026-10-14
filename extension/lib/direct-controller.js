@@ -11,6 +11,7 @@ const JOURNAL_KEY = 'codexAnyDevice.direct.v1';
 const ACTIVE = new Set(['starting', 'running', 'waitingApproval', 'cancelling']);
 const digest = value => createHash('sha256').update(value).digest('hex');
 const ERRORS = new Set(['qqDenied', 'qqNetwork', 'qqProtocol', 'qqEndpoint', 'qqShards', 'qqRuntime',
+  'qqEndpointTransport', 'qqEndpointHost', 'qqEndpointPath', 'qqEndpointOptions',
   'codexMissing', 'codexUnsupported', 'codexUnsupportedRequest', 'codexPolicy', 'configurationChanged', 'storageFailed']);
 
 // OS-owned loopback reservation: no control API, credentials, data or stale lock files.

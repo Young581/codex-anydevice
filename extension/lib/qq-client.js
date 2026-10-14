@@ -5,6 +5,9 @@ const { validAppId, validSecret, validSender } = require('./setup-model');
 
 const API = 'https://api.bot.qq.com';
 const TOKEN_URL = API + '/app/getAppAccessToken';
+// Tencent's API-v2 examples and official botpy tests use these exact hosts.
+// Keep REST/token traffic on API; never trust arbitrary QQ subdomains for Identify.
+const GATEWAY_HOSTS = new Set(['api.bot.qq.com', 'api.sgroup.qq.com']);
 const MAX_BODY = 256 * 1024;
 
 class QqClient extends EventEmitter {
@@ -68,8 +71,10 @@ class QqClient extends EventEmitter {
     const gateway = await this.json(API + '/gateway/bot', { headers: { Authorization: 'QQBot ' + this.token } });
     if (this.stopped || epoch !== this.epoch) return;
     let url; try { url = new URL(gateway.url); } catch { throw new Error('qqProtocol'); }
-    if (url.protocol !== 'wss:' || url.hostname !== 'api.bot.qq.com' || url.port || url.username || url.password
-      || !/^\/websocket\/?$/.test(url.pathname) || url.search || url.hash) throw new Error('qqEndpoint');
+    if (url.protocol !== 'wss:' || url.port || url.username || url.password) throw new Error('qqEndpointTransport');
+    if (!GATEWAY_HOSTS.has(url.hostname)) throw new Error('qqEndpointHost');
+    if (!/^\/websocket\/?$/.test(url.pathname)) throw new Error('qqEndpointPath');
+    if (url.search || url.hash) throw new Error('qqEndpointOptions');
     if (gateway.shards && gateway.shards !== 1) throw new Error('qqShards');
     if (gateway.session_start_limit?.remaining === 0 && !this.session) throw new Error('qqDenied');
     const socket = new this.WebSocket(url.href); this.socket = socket;
