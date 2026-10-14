@@ -158,12 +158,13 @@ test('setup reports only gateway rejection categories in both languages and rele
       const h = host(language); const f = gatewayFixture(t, { url }); let releases = 0;
       const controller = new SetupController(h.api, h.context, {
         resolveCodex: async () => ({ file: '/synthetic/codex', prefix: [] }),
+        check: async () => ({ checked: true, codex: { found: true, version: CODEX_VERSION, login: 'unknown' } }),
         direct: { qq: f.qq, reserve: async () => async () => { releases++; } },
       });
       t.after(() => controller.dispose());
       await controller.store.saveBot(appId, 'synthetic_secret');
       await controller.store.saveProject({ name: 'synthetic', path: folder });
-      h.warnings.push(strings.connectAllow); await controller.act('connect');
+      await controller.act('connect');
       assert.equal(controller.notice, strings[error]);
       assert.deepEqual(h.calls.find(call => call[0] === 'error'), ['error', strings[error]]);
       const model = await controller.model();
@@ -435,7 +436,7 @@ async function directFixture(t, overrides = {}) {
   const options = { qq, reserve: async () => async () => { releases++; }, createSession: () => { const session = new FakeSession(); sessions.push(session); return session; }, ...overrides };
   const direct = new DirectController(h.api, h.context, store, en, options);
   t.after(async () => { await direct.disconnect().catch(() => {}); fs.rmSync(folder, { recursive: true, force: true }); });
-  h.warnings.push(en.connectAllow); await direct.connect({ file: '/synthetic/codex', prefix: [] });
+  await direct.connect({ file: '/synthetic/codex', prefix: [] });
   let counter = 0;
   const send = async (text, who = sender, id) => { qq.emit('message', { id: id || 'synthetic_' + ++counter, sender: who, text, at: (options.now || Date.now)() }); await direct.queue; await tick();
     if (text.startsWith('/new ') && direct.task && who === direct.allowed) await until(() => !direct.task || Boolean(direct.session && (direct.session.gate || direct.session.executions.length))); };
@@ -486,7 +487,7 @@ test('cancelling during native startup prevents execution', async t => {
 
 test('old execution cleanup cannot stop a replacement session', async t => {
   const f = await directFixture(t); await f.pair(); await f.send('/new first'); const old = f.sessions[0];
-  await f.direct.disconnect(); f.warnings.push(en.connectAllow); await f.direct.connect({ file: '/synthetic/codex', prefix: [] });
+  await f.direct.disconnect(); await f.direct.connect({ file: '/synthetic/codex', prefix: [] });
   await f.pair(); await f.send('/new second'); const next = f.sessions[1]; await tick();
   assert.equal(old.closed, true); assert.equal(next.closed, false); assert.equal(f.direct.session, next);
 });
@@ -512,14 +513,14 @@ test('task failure reaches QQ and the desktop, survives reload, and clears for a
   t.after(() => restored.dispose());
   const untrusted = journal({ last: { id: stored.last.id, status: 'failed', error: 'synthetic-private-error', phase: 'synthetic-private-path' } });
   assert.equal(untrusted.last.error, undefined); assert.equal(untrusted.last.phase, undefined);
-  f.warnings.push(en.connectAllow); await f.direct.connect({ file: '/synthetic/codex', prefix: [] }); await f.pair();
+  await f.direct.connect({ file: '/synthetic/codex', prefix: [] }); await f.pair();
   await f.send('/new next'); assert.equal(f.direct.snapshot().error, undefined); assert.equal(f.direct.snapshot().phase, undefined);
 });
 
 test('late failure from an old task cannot overwrite a replacement task diagnostic', async t => {
   const f = await directFixture(t); await f.pair(); await f.send('/new old'); const old = f.sessions[0];
   old.stop = () => { old.closed = true; };
-  await f.direct.disconnect(); f.warnings.push(en.connectAllow); await f.direct.connect({ file: '/synthetic/codex', prefix: [] });
+  await f.direct.disconnect(); await f.direct.connect({ file: '/synthetic/codex', prefix: [] });
   await f.pair(); await f.send('/new current'); const current = f.sessions[1];
   current.emit('phase', 'phaseTurn'); old.failure = 'codexProtocol'; old.finish('unknown'); await tick();
   assert.equal(f.direct.session, current); assert.equal(f.direct.snapshot().error, undefined);
@@ -552,15 +553,14 @@ test('a stale queued storage error cannot disconnect a newer connection', async 
   const storage = f.context.globalState.update;
   f.context.globalState.update = () => { entered.resolve(); return new Promise((_resolve, reject) => { rejectSave = reject; }); };
   const pending = f.send('/status'); await entered.promise;
-  await f.direct.disconnect(); f.warnings.push(en.connectAllow); await f.direct.connect({ file: '/synthetic/codex', prefix: [] });
+  await f.direct.disconnect(); await f.direct.connect({ file: '/synthetic/codex', prefix: [] });
   f.context.globalState.update = storage; rejectSave(new Error('synthetic stale save failure')); await pending;
   assert.equal(f.direct.status, 'connected'); assert.ok(f.direct.selected); assert.equal(f.direct.error, undefined);
 });
 
 test('connect reservation acquired after disconnect is released without connecting', async t => {
   const f = await directFixture(t); await f.direct.disconnect(); const reservation = deferred(); let released = 0;
-  const acquiring = deferred(); f.direct.options.reserve = () => { acquiring.resolve(); return reservation.promise; }; f.warnings.push(en.connectAllow);
-  const request = f.direct.connect({ file: '/synthetic/codex', prefix: [] }); await acquiring.promise;
+  const acquiring = deferred(); f.direct.options.reserve = () => { acquiring.resolve(); return reservation.promise; }; const request = f.direct.connect({ file: '/synthetic/codex', prefix: [] }); await acquiring.promise;
   await f.direct.disconnect(); reservation.resolve(async () => { released++; }); await request;
   assert.equal(released, 1); assert.equal(f.direct.selected, undefined); assert.equal(f.direct.status, 'disconnected');
 });
@@ -572,7 +572,7 @@ test('journal reload keeps replay hashes, marks interrupted work unknown, and ha
   const normalized = journal({ seen: entries, floor: 0 });
   assert.equal(normalized.seen.length, 512); assert.equal(normalized.floor, at + 1); assert.equal(normalized.seen[0].prompt, undefined);
   await f.direct.disconnect(); const qq = new FakeQQ(); const next = new DirectController(f.api, f.context, f.store, en, { qq, reserve: f.direct.options.reserve, createSession: () => { throw new Error('Replay should never execute'); } });
-  t.after(() => next.disconnect()); f.warnings.push(en.connectAllow); await next.connect({ file: '/synthetic/codex', prefix: [] });
+  t.after(() => next.disconnect()); await next.connect({ file: '/synthetic/codex', prefix: [] });
   next.pair(); f.warnings.push(en.pairAllow);
   await next.handle({ id: 'new_pair_message', sender, text: '/pair ' + next.snapshot().pairingCode, at: Date.now() });
   await next.handle({ id: 'replayed_message', sender, text: '/new synthetic', at: Date.now() });
@@ -593,4 +593,128 @@ test('setup configuration edits disconnect the direct runtime first and result v
   await controller.act('identity'); assert.equal(disconnected, 1);
   controller.direct.output = 'synthetic result'; await controller.act('showResult');
   assert.ok(f.calls.some(call => call[0] === 'open' && call[1].content === 'synthetic result'));
+});
+
+const { SharedBroker, validEndpoint, filterDesktop } = require('../extension/lib/shared-proxy');
+const { SharedIntegration, KEY: SYNC_KEY } = require('../extension/lib/shared-integration');
+function brokerFixture() {
+  const native = [], desktop = [], phone = [];
+  const broker = new SharedBroker(message => native.push(message), message => desktop.push(message));
+  const client = { send: message => phone.push(message) };
+  broker.request(broker.desktop, { id: 1, method: 'initialize', params: {} });
+  broker.receive({ id: native.at(-1).id, result: { userAgent: 'synthetic' } });
+  broker.request(client, { id: 1, method: 'initialize', params: {} });
+  const start = () => {
+    broker.request(client, { id: 2, method: 'thread/start', params: {} });
+    broker.receive({ id: native.at(-1).id, result: { thread: { id: 'synthetic_mobile_thread' } } });
+  };
+  return { broker, native, desktop, phone, client, start };
+}
+test('shared broker isolates colliding RPC IDs and refuses phone access to desktop threads', () => {
+  const f = brokerFixture();
+  f.broker.request(f.client, { id: 2, method: 'thread/start', params: {} }); const phoneId = f.native.at(-1).id;
+  f.broker.request(f.broker.desktop, { id: 2, method: 'account/read', params: {} }); const desktopId = f.native.at(-1).id;
+  assert.notEqual(phoneId, desktopId);
+  f.broker.receive({ id: desktopId, result: { syntheticDesktop: true } });
+  f.broker.receive({ id: phoneId, result: { thread: { id: 'synthetic_mobile_thread' } } });
+  assert.equal(f.phone.at(-1).id, 2); assert.equal(f.desktop.at(-1).id, 2);
+  assert.equal(f.phone.some(message => message.result?.syntheticDesktop), false);
+  const count = f.native.length;
+  for (const method of ['thread/read', 'turn/start', 'turn/interrupt']) f.broker.request(f.client, { id: 10, method, params: { threadId: 'desktop_thread', turnId: 'desktop_turn' } });
+  assert.equal(f.native.length, count); assert.ok(f.phone.at(-1).error);
+});
+test('official reads wait for first materialization and cannot alter phone policy or start a second turn', () => {
+  const f = brokerFixture(); f.start(); const count = f.native.length;
+  f.broker.request(f.broker.desktop, { id: 3, method: 'thread/resume', params: { threadId: 'synthetic_mobile_thread',
+    excludeTurns: true, approvalPolicy: 'never', sandbox: 'danger-full-access', model: 'other' } });
+  assert.equal(f.native.length, count); assert.equal(f.phone.at(-1).method, 'anydevice/desktopJoined');
+  f.broker.request(f.client, { id: 3, method: 'turn/start', params: { threadId: 'synthetic_mobile_thread', input: [] } });
+  f.broker.receive({ method: 'turn/started', params: { threadId: 'synthetic_mobile_thread', turn: { id: 'mobile_turn' } } });
+  assert.deepEqual(f.native.at(-1).params, { threadId: 'synthetic_mobile_thread', excludeTurns: true });
+  const activeCount = f.native.length;
+  f.broker.request(f.broker.desktop, { id: 4, method: 'turn/start', params: { threadId: 'synthetic_mobile_thread', input: [] } });
+  f.broker.request(f.client, { id: 4, method: 'turn/start', params: { threadId: 'synthetic_mobile_thread', input: [] } });
+  assert.equal(f.native.length, activeCount);
+  f.broker.receive({ method: 'turn/completed', params: { threadId: 'synthetic_mobile_thread', turn: { id: 'mobile_turn', status: 'completed' } } });
+  f.broker.request(f.broker.desktop, { id: 5, method: 'turn/start', params: { threadId: 'synthetic_mobile_thread', input: [] } });
+  assert.equal(f.native.at(-1).method, 'turn/start');
+});
+test('shared approvals have one owner; a foreign frontend cannot resolve them', () => {
+  const f = brokerFixture(); f.start(); const request = { id: 77, method: 'item/commandExecution/requestApproval', params: { threadId: 'synthetic_mobile_thread' } };
+  f.broker.receive(request); assert.equal(f.phone.at(-1), request); assert.equal(f.desktop.includes(request), false);
+  const count = f.native.length; f.broker.request(f.broker.desktop, { id: 77, result: { decision: 'accept' } });
+  assert.equal(f.native.length, count); f.broker.request(f.client, { id: 77, result: { decision: 'decline' } });
+  assert.deepEqual(f.native.at(-1), { id: 77, result: { decision: 'decline' } });
+});
+test('desktop unsubscribe cannot remove a running phone subscription and is allowed after native completion', () => {
+  const f = brokerFixture(); f.start();
+  const threadId = 'synthetic_mobile_thread';
+  f.broker.request(f.client, { id: 3, method: 'turn/start', params: { threadId, input: [] } });
+  f.broker.receive({ method: 'turn/started', params: { threadId, turn: { id: 'mobile_turn' } } });
+  const count = f.native.length;
+  f.broker.request(f.broker.desktop, { id: 8, method: 'thread/unsubscribe', params: { threadId } });
+  assert.equal(f.native.length, count); assert.equal(f.desktop.at(-1).id, 8); assert.ok(f.desktop.at(-1).error);
+  const progress = { method: 'item/agentMessage/delta', params: { threadId, turnId: 'mobile_turn', delta: 'synthetic progress' } };
+  f.broker.receive(progress); assert.equal(f.phone.at(-1), progress);
+  f.broker.receive({ method: 'turn/completed', params: { threadId, turn: { id: 'mobile_turn', status: 'completed' } } });
+  assert.equal(f.broker.owners.size, 0);
+  f.broker.request(f.broker.desktop, { id: 9, method: 'thread/unsubscribe', params: { threadId } });
+  assert.equal(f.native.at(-1).method, 'thread/unsubscribe'); assert.equal(f.native.at(-1).params.threadId, threadId);
+});
+test('a disconnected phone is interrupted accurately even before the native turn ID arrives', () => {
+  const f = brokerFixture(); f.start();
+  f.broker.request(f.client, { id: 3, method: 'turn/start', params: { threadId: 'synthetic_mobile_thread', input: [] } });
+  f.broker.disconnect(f.client); const count = f.native.length;
+  f.broker.receive({ method: 'turn/started', params: { threadId: 'synthetic_mobile_thread', turn: { id: 'mobile_turn' } } });
+  assert.equal(f.native.length, count + 1); assert.deepEqual(f.native.at(-1).params, { threadId: 'synthetic_mobile_thread', turnId: 'mobile_turn' });
+  assert.equal(f.native.at(-1).method, 'turn/interrupt'); assert.equal(f.broker.owners.size, 1);
+  f.broker.receive({ method: 'turn/completed', params: { threadId: 'synthetic_mobile_thread', turn: { id: 'mobile_turn', status: 'interrupted' } } });
+  assert.equal(f.broker.owners.size, 0); assert.ok(f.desktop.at(-1));
+});
+test('only canonical loopback endpoints are accepted and unrelated desktop requests remain intact', () => {
+  for (const url of ['tcp://localhost:42000', 'tcp://127.0.0.1:42000/', 'tcp://127.0.0.1:42000?token=x', 'tcp://127.0.0.1:65536', 'tcp://user@127.0.0.1:4', 'tcp://192.0.2.1:4']) assert.equal(validEndpoint(url), false);
+  assert.equal(validEndpoint('tcp://127.0.0.1:42000'), true);
+  const message = { method: 'turn/start', params: { threadId: 'desktop_thread' } };
+  assert.equal(filterDesktop(message, 'phone_thread'), message);
+});
+test('connecting automatically creates a code, then one exact identity and project confirmation authorizes tasks', async t => {
+  const f = await directFixture(t); assert.match(f.direct.snapshot().pairingCode, /^[A-F0-9]{8}$/);
+  assert.equal(f.direct.snapshot().paired, false); assert.equal(f.warnings.length, 0);
+  let shown; f.api.window.showWarningMessage = async (message, options) => { shown = { message, options }; return en.pairAllow; };
+  await f.send('/pair ' + f.direct.snapshot().pairingCode);
+  assert.ok(shown.options.detail.includes(sender)); assert.ok(shown.options.detail.includes(f.folder)); assert.ok(shown.options.detail.includes(en.connectDetail));
+  assert.equal(f.direct.snapshot().paired, true);
+});
+test('official sync saves and restores the original setting and rejects a changed value', async () => {
+  const h = host(); let original = '/synthetic/original'; const updates = [];
+  h.api.workspace.getConfiguration = () => ({ inspect: () => ({ globalValue: original }), get: () => original,
+    update: async (_key, value) => { updates.push(value); original = value; } });
+  const sync = new SharedIntegration(h.api, h.context, en, { prepare: async () => '/synthetic/launcher' });
+  await sync.enable({}); assert.equal(updates.length, 0);
+  h.warnings.push(en.syncAllow); await sync.enable({}); assert.equal(original, '/synthetic/launcher');
+  assert.equal(h.data.get(SYNC_KEY).previous, '/synthetic/original');
+  original = '/synthetic/manual'; await assert.rejects(sync.disable(), /syncChanged/); assert.equal(original, '/synthetic/manual');
+  original = '/synthetic/launcher'; await sync.disable(); assert.equal(original, '/synthetic/original'); assert.equal(sync.snapshot().enabled, false);
+});
+test('a setting changed during the confirmation cannot be overwritten by enabling sync', async () => {
+  const h = host(); let value = '/synthetic/original', changed = 0;
+  h.api.workspace.getConfiguration = () => ({ inspect: () => ({ globalValue: value }), update: async () => { changed++; } });
+  h.api.window.showWarningMessage = async () => { value = '/synthetic/changed'; return en.syncAllow; };
+  const sync = new SharedIntegration(h.api, h.context, en, { prepare: async () => '/synthetic/launcher' });
+  await assert.rejects(sync.enable({}), /syncChanged/); assert.equal(changed, 0); assert.equal(h.data.get(SYNC_KEY), undefined);
+});
+
+test('cancellation while the official view is opening prevents model submission', async t => {
+  const f = nativeFixture(t), gate = deferred(); f.session.options.onThread = () => gate.promise;
+  await f.session.start(f.cwd); const done = f.session.execute('synthetic', f.cwd); await tick();
+  await f.session.interrupt(); gate.resolve(); const result = await done;
+  assert.equal(result.status, 'cancelled'); assert.equal(f.writes.some(message => message.method === 'turn/start'), false);
+});
+
+test('legacy and unidentified requests cannot escape the phone approval owner', () => {
+  const f = brokerFixture(); f.start(); const before = f.desktop.length;
+  const legacy = { id: 90, method: 'execCommandApproval', params: { conversationId: 'synthetic_mobile_thread' } };
+  f.broker.receive(legacy); assert.equal(f.phone.at(-1), legacy); assert.equal(f.desktop.length, before);
+  f.broker.receive({ id: 91, method: 'syntheticUnknownRequest', params: {} });
+  assert.equal(f.desktop.length, before); assert.equal(f.native.at(-1).id, 91); assert.equal(f.native.at(-1).error.code, -32601);
 });

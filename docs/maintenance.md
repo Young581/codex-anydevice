@@ -37,3 +37,11 @@
 ## 发布纪律
 
 开发用离线 VSIX 与正式发布分开。正式发布按 `docs/releases.md`：检查 → 锁版本 → 官方 vsce → 同包审计 → 隔离宿主 → Release/市场上传 → 下载复核。发布记录写入 `docs/verification.md`；模型任务只在专门原型验收阶段运行，不在普通 CI 里消耗账号额度。
+
+## 官方同步回归
+
+原生契约锁定 CLI 0.162.0-alpha.17.2 和官方扩展 26.51007.21434。更新前先核对当前官方文档与公开安装载荷，生成包含实验字段的 schema，确认分页历史、初始化、原生请求和 URI 路由。不要只放宽版本字符串。
+
+Windows 使用 Node 24 运行 `node scripts/verify-official-sync.js --vscode <Code.exe绝对路径> --codex <codex.exe绝对路径> --official-extension <公开官方扩展载荷目录> --payload <已安装AnyDevice载荷目录>`。所有项目、认证、配置和 VS Code 用户数据在 `.tmp` 中新建，Responses 模型服务仅在 loopback 监听并验证合成凭据；不运行真实模型任务、不自动处理审批。检查实际启动器准备与私有 ACL、错误令牌拒绝、官方 DOM 运行进度、原线程桌面续聊、准确取消和取消后后端存活。`--payload` 不指定时仅验证仓库源码，不能当作最终 VSIX 验收。
+
+最终包仍执行原有完整审计、隔离安装和配置页宿主检查。CI 只跑合成单元/打包检查；该官方 GUI 回归需本机独立执行，不加入会读取实际登录状态的默认 CI。同步修改 `chatgpt.cliExecutable` 时保留原值，关闭/卸载前提供恢复，不能改 Beacon 设置或官方安装文件。

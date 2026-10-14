@@ -1,6 +1,6 @@
 # 个人 QQ 直连配置与使用
 
-0.3.3 已接入 QQ 官方 WebSocket 与 Codex 新线程原型，不依赖 OpenClaw。真实机器人接入、手机收发及模型任务仍需验收。
+0.4.0 已接入 QQ 官方 WebSocket 与 Codex 新线程原型，不依赖 OpenClaw。真实机器人接入、手机收发及模型任务仍需验收。
 
 ## 准备电脑与机器人
 
@@ -14,19 +14,23 @@ Codex 从 PATH、Windows npm 入口或已安装 OpenAI 扩展发现，也可手�
 
 QQ 文档列出 WebSocket，但账号权限以实际连接为准。本版支持 `api.bot.qq.com` 与腾讯官方 SDK 使用的 `api.sgroup.qq.com` 的单分片 WSS `/websocket` 接入点；其他主机、路径和附加参数保守拒绝，未实现需要 HTTPS 回调的 Webhook。
 
-若 0.3.0 显示“QQ 返回了当前未核对的连接地址”，安装 0.3.3 并重载 VS Code 后重新连接，已保存的机器人与项目配置继续使用。若仍失败，只需反馈页面中的 `transport`、`host`、`path` 或 `options` 类别，无需发送完整连接地址、参数或密钥。插件不会自动改写地址或绕过校验。
+若 0.3.0 显示“QQ 返回了当前未核对的连接地址”，安装 0.4.0 并重载 VS Code 后重新连接，已保存的机器人与项目配置继续使用。若仍失败，只需反馈页面中的 `transport`、`host`、`path` 或 `options` 类别，无需发送完整连接地址、参数或密钥。插件不会自动改写地址或绕过校验。
 
 ## 连接并自动取得身份
 
 1. 选择当前打开的一个本地项目，保存其真实目录。
-2. 点击 **连接 QQ**，在电脑确认授权项目，等待 **QQ 已连接**。
-3. 点击 **开始配对**，页面显示 `/pair 一次性代码`，5 分钟有效、最多 5 次尝试。
-4. 用本人 QQ **私聊**机器人发送该命令；电脑显示真实发信人的 OpenID 和项目，确认刚才是自己发送后点击 **确认是本人**。
+2. 点击 **连接 QQ**，自动检查环境，等待 **QQ 已连接**。此时尚未授权手机任务。
+3. 连接成功自动显示 `/pair 一次性代码`，5 分钟有效、最多 5 次尝试。
+4. 用本人 QQ **私聊**机器人发送该命令；电脑显示真实发信人的 OpenID 和项目，确认刚才是自己发送后点击 **确认本人并授权项目**。
 5. 页面显示 **本人 QQ 已配对**，机器人返回命令说明。
 
 身份来自 `C2C_MESSAGE_CREATE` 的外层 `d.author.user_openid`，**无需 QQ 号码或手工找 ID**。群聊与引用身份无效。高级手工登记仅保存资料，每次连接仍需配对，见[身份说明](qq-identity.md)。拒绝、过期或已使用的代码需重新开始。
 
 主动断开、重载或重启后需重新配对；短时自动重连可保留本次身份。同一机器人多窗口连接会被占用检查拒绝。修改机器人、项目、身份、Codex 路径或清除配置会撤销连接。
+
+## 官方面板显示和电脑续聊
+
+需要在官方 Codex 中看运行进度并继续聊时，首次点击 **启用官方 Codex 同步**，确认保存原入口，结束桌面任务后重载 VS Code。后续 `/new` 自动打开官方会话，完成后可在同一线程输入后续问题。同步目前锁定 Windows 与官方扩展 26.51007.21434；**恢复原 Codex 入口** 可撤回。卸载前先恢复并重载。高级环境检查、OpenID 登记和配置摘要无需每次操作。详见 [同步边界](official-sync.md)。
 
 ## 新任务指令
 
@@ -42,7 +46,7 @@ QQ 文档列出 WebSocket，但账号权限以实际连接为准。本版支持 
 /new 读取 README，概括项目用途，不修改任何文件，不运行命令。
 ```
 
-核对接收、运行、结果及实际文件。写文件、运行命令、ChatGPT/API 两种任务另行验收。电脑和 VS Code 必须保持运行；本版不支持既有线程续聊、手机审批、提问回复、群聊、附件或多项目。
+核对接收、运行、结果及实际文件。写文件、运行命令、ChatGPT/API 两种任务另行验收。电脑和 VS Code 必须保持运行；本版不支持手机既有线程续聊、手机审批、提问回复、群聊、附件或多项目。
 
 ## 收到任务后失败或状态未确认
 
@@ -57,7 +61,7 @@ QQ 文档列出 WebSocket，但账号权限以实际连接为准。本版支持 
 
 旧版的未知记录无法补回当时的失败原因。若没有最终结果，先核对本机任务和项目状态，再发新任务；插件不会自动重放或宣称修改已撤销。无需发送完整地址、原始日志、登录文件或密钥。
 
-若 0.3.2 在“创建新线程”阶段提示“Codex 未返回预期的沙箱与用户审批策略”，先安装 0.3.3、重载、重新连接和配对，再发一个新任务。旧版误将有效 workspace-write 的空额外可写目录列表视为错误；0.3.3 已修复这一兼容问题。保存的机器人、项目与 Codex 路径继续使用。其他策略不匹配仍会停止任务，更新后的真实执行结果需复测。
+若 0.3.2 在“创建新线程”阶段提示“Codex 未返回预期的沙箱与用户审批策略”，先安装 0.4.0、重载、重新连接和配对，再发一个新任务。旧版误将有效 workspace-write 的空额外可写目录列表视为错误；0.4.0 已修复这一兼容问题。保存的机器人、项目与 Codex 路径继续使用。其他策略不匹配仍会停止任务，更新后的真实执行结果需复测。
 
 ## 电脑审批与沙箱
 
@@ -77,7 +81,7 @@ Codex 请求审批时，原生确认框显示准确 request/thread/turn/item，�
 
 ## English
 
-Save official bot credentials, select one trusted local project and connect with desktop consent. Start pairing, send `/pair CODE` from your own QQ private chat and confirm on the computer. OpenID is obtained automatically; manual metadata still requires pairing. Use `/new TASK`, `/status`, `/cancel`. Each task uses a separate thread and existing CLI authentication/model/provider; API calls may incur charges. Verified version: 0.162.0-alpha.17.2.
+Save official bot credentials, select one trusted local project and connect to generate a pairing code automatically. Send `/pair CODE` from your own QQ private chat and confirm on the computer. OpenID is obtained automatically; manual metadata still requires pairing. Use `/new TASK`, `/status`, `/cancel`. Each task uses a separate thread and existing CLI authentication/model/provider; API calls may incur charges. Verified version: 0.162.0-alpha.17.2.
 
 Requested approvals stay on the computer, expire after two minutes and require exact request matching. Unsupported requests fail closed. More restrictive native read-only policies are preserved. Restarts revoke pairing and never replay tasks. QQ reply expiry is conservatively five minutes; view bounded results on the computer if delivery fails. Bot eligibility, phone use and real subscription/API execution remain unverified.
 

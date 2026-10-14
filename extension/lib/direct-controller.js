@@ -46,6 +46,7 @@ class DirectController {
     this.data = journal(context.globalState.get(JOURNAL_KEY));
     this.qq.on('state', value => {
       this.status = value; this.changed();
+      if (value === 'connected' && this.selected && !this.allowed && !this.pairing && !this.task) this.pair();
       if (['qqDenied', 'qqNetwork'].includes(value)) void this.disconnect(value).catch(() => {});
     });
     this.qq.on('message', message => {
@@ -66,7 +67,7 @@ class DirectController {
     return { status: this.status, paired: Boolean(this.allowed), task: this.data.last,
       busy: Boolean(this.task), deliveryFailed: this.deliveryFailed, error: this.error || this.data.last?.error,
       phase: this.currentPhase || this.data.last?.phase,
-      hasResult: Boolean(this.output), readOnly: this.readOnly,
+      hasResult: Boolean(this.output), hasThread: Boolean(this.latestThread), readOnly: this.readOnly,
       pairingCode: this.pairing && this.now() < this.pairing.expires ? this.pairing.code : undefined };
   }
   async persist() {
@@ -103,10 +104,6 @@ class DirectController {
     let release;
     try {
       const selected = await this.project();
-      const answer = await this.vscode.window.showWarningMessage(this.t.connectConfirm, {
-        modal: true, detail: selected.project.path + '\n\n' + this.t.connectDetail,
-      }, this.t.connectAllow);
-      if (answer !== this.t.connectAllow || epoch !== this.epoch || !this.local()) return;
       const latest = await this.project();
       if (epoch !== this.epoch || latest.appId !== selected.appId || latest.project.path !== selected.project.path) return;
       release = await (this.options.reserve || reserveBot)(selected.appId);
@@ -171,7 +168,7 @@ class DirectController {
       this.pairing = undefined; clearTimeout(this.pairTimer); this.changed();
       const selected = await this.project();
       const answer = await this.vscode.window.showWarningMessage(this.t.pairConfirm, {
-        modal: true, detail: this.t.pairIdentity + '\n' + message.sender + '\n\n' + selected.project.path,
+        modal: true, detail: this.t.pairIdentity + '\n' + message.sender + '\n\n' + selected.project.path + '\n\n' + this.t.connectDetail,
       }, this.t.pairAllow);
       if (answer !== this.t.pairAllow || !this.valid(epoch) || this.now() >= pairing.expires || generation !== this.pairGeneration) return;
       await this.project(); if (!this.valid(epoch)) return;
@@ -191,6 +188,7 @@ class DirectController {
       const operation = { id: randomBytes(6).toString('hex'), status: 'starting', cancelRequested: false };
       this.task = operation; this.data.last = { id: operation.id, status: 'starting' }; this.output = ''; this.error = undefined;
       this.currentPhase = undefined; this.readOnly = undefined;
+      this.latestThread = undefined;
       try { await this.persist(); } catch (error) { this.task = undefined; this.data.last.status = 'unknown'; throw error; }
       this.changed(); await this.reply(message, this.t.phoneAccepted + operation.id, epoch);
       void this.execute(operation, message.text.slice(5).trim(), message, epoch);
@@ -203,8 +201,12 @@ class DirectController {
       if (operation.cancelRequested) { result.status = 'cancelled'; return; }
       const selected = await this.project();
       if (!this.valid(epoch, operation)) return;
-      session = (this.options.createSession || (spec => new CodexSession(spec)))(this.spec);
+      session = await (this.options.createSession || (spec => new CodexSession(spec)))(this.spec);
+      if (!this.valid(epoch, operation)) { session.stop(); return; }
       this.session = session;
+      session.on('thread', threadId => {
+        if (this.valid(epoch, operation)) { this.latestThread = threadId; this.changed(); }
+      });
       session.on('phase', phase => {
         if (this.valid(epoch, operation) && CODEX_PHASES.includes(phase)) {
           this.currentPhase = phase; this.data.last.phase = phase; this.changed();
@@ -294,7 +296,7 @@ class DirectController {
   }
   async clear() {
     await this.disconnect(); this.data = { seen: [], floor: this.now(), last: undefined }; this.output = '';
-    this.error = undefined; this.currentPhase = undefined; await this.persist();
+    this.error = undefined; this.currentPhase = undefined; this.latestThread = undefined; await this.persist();
   }
   dispose() { void this.disconnect().catch(() => {}); }
 }

@@ -1,13 +1,13 @@
 # 架构与控制边界
 
-0.3.3 已实现个人 QQ 官方 WebSocket 与 Codex 新线程原型，实际账号、手机与模型任务待验收。
+0.4.0 已实现个人 QQ 官方 WebSocket 与 Codex 新线程原型，实际账号、手机与模型任务待验收。
 
 ```mermaid
 flowchart LR
   Phone[本人 QQ 私聊] --> QQ[QQ 官方接口]
   QQ --> Client[qq-client 鉴权与连接]
   Client --> Control[direct-controller 配对/授权/去重]
-  Control --> Native[codex-session 本地 stdio]
+  Control --> Native[codex-session 独立或共享连接]
   Native --> Codex[Codex 新线程与沙箱]
   Codex --> Project[授权项目]
   VSCode[VS Code 原生确认] --> Control
@@ -23,7 +23,7 @@ flowchart LR
 | direct-controller | 配对、电脑授权、串行队列、匿名去重、单任务、取消与审批 |
 | codex-session | 精确版本、stdio、独立线程/轮次、有效策略检查、准确请求匹配与中断 |
 
-激活不自动连接或读取密钥，不重放任务；用户授权后连 QQ，`/new` 才启动拥有的子进程。每个任务一个新线程，不读取或接管旧线程。退出、重载、断开或终止连接失败撤销验证、停止拥有的进程并标记未知结果。Windows 按创建的子进程 PID 清理其进程树。
+激活不自动连接或读取密钥，不重放任务；用户点击后连 QQ，自动生成配对码；准确身份与项目授权在最后一次电脑确认中合并，`/new` 才启动拥有的子进程。每个任务一个新线程，不读取或接管旧线程。启用官方同步时，由官方扩展拥有原生 stdio 后端；认证本机代理复用这条连接，隔离前端 RPC ID、路由请求与单线程写入。QQ 断开只中断手机线程，不杀桌面后端。详见 [官方同步](official-sync.md)。退出、重载、断开或终止连接失败撤销验证、停止拥有的进程并标记未知结果。Windows 按创建的子进程 PID 清理其进程树。
 
 同一 OS 用户下，用 AppID 派生的 loopback 端口跨窗口占用，监听立即销毁入站连接，不提供控制接口或数据。OS 在进程退出时释放；碰撞或其他端口占用保守拒绝。
 
@@ -33,7 +33,7 @@ flowchart LR
 
 项目从当前本地工作区明确选择并核对真实目录，执行和审批前重查。手机不传路径，任务正文是模型输入，不能用命令文本解析替代原生沙箱。所选目录不是完整读取边界。
 
-消息队列最多 32，执行独立于队列，运行中可响应状态/取消。一个控制器一个活跃任务，一个新线程一个写入者。执行前持久保存 SHA-256(AppID、sender、messageID)，最多 512 条；淘汰推进时间截断，旧事件保守拒绝。保存失败停止接收；重启活跃状态为 unknown，不重放。该日志不是文件事务或恰好一次执行保证。
+消息队列最多 32，执行独立于队列，运行中可响应状态/取消。一个控制器一个活跃任务，一个新线程一个写入者。共享模式中，运行中的手机线程禁止桌面另起轮次，恢复不能覆盖已核对的策略；原生完成后解除占用，允许桌面续聊。执行前持久保存 SHA-256(AppID、sender、messageID)，最多 512 条；淘汰推进时间截断，旧事件保守拒绝。保存失败停止接收；重启活跃状态为 unknown，不重放。该日志不是文件事务或恰好一次执行保证。
 
 日志仅含哈希、时间、最近随机任务 ID/状态，以及白名单中的错误类别和任务阶段，无原始身份、目录、prompt、结果、原始错误正文或 native IDs。状态为 starting/running/waitingApproval/cancelling/completed/failed/cancelled/unknown；中断确认前不宣称取消或回滚完成。明确尚未发起 turn/start 或收到该请求的 JSON-RPC 拒绝可记 failed；提交后的连接中断保留 unknown。
 

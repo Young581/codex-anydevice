@@ -27,7 +27,7 @@ function activate(context) {
     vscode.commands.registerCommand('codexAnyDevice.showStatus', async () => {
       const model = await controller.model();
       return vscode.window.showInformationMessage(model.direct.status === 'disconnected'
-        ? `${t.preparing} · ${model.completed}/3 · ${t.disconnected}`
+        ? `${t.disconnected} · ${t.needsPairing}`
         : `${t[model.direct.status]} · ${model.direct.paired ? t.paired : t.identityMissing}`);
     }),
     ...['connect', 'disconnect', 'pair'].map(action => vscode.commands.registerCommand(

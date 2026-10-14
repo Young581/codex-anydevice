@@ -2,7 +2,7 @@
   "name": "codex-anydevice",
   "displayName": "Codex AnyDevice",
   "description": "Start personal Codex tasks through an official QQ bot, with desktop pairing and approvals.",
-  "version": "0.3.3",
+  "version": "0.4.0",
   "publisher": "Young581",
   "license": "MIT",
   "preview": true,

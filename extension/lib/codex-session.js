@@ -9,7 +9,8 @@ const APPROVALS = new Set(['item/commandExecution/requestApproval', 'item/fileCh
 const TERMINAL = { completed: 'completed', interrupted: 'cancelled', failed: 'failed' };
 const CODEX_ERRORS = Object.freeze(['codexMissing', 'codexUnsupported', 'codexUnsupportedRequest', 'codexPolicy',
   'codexVersionProbe', 'codexSpawnFailed', 'codexExited', 'codexDisconnected', 'codexTimeout', 'codexProtocol',
-  'codexRequestFailed', 'codexRequestParams', 'codexAuth', 'codexLimit', 'codexProvider', 'codexSandbox', 'codexTaskFailed']);
+  'codexRequestFailed', 'codexRequestParams', 'codexAuth', 'codexLimit', 'codexProvider', 'codexSandbox', 'codexTaskFailed',
+  'syncUnavailable', 'syncBusy', 'syncNotReady', 'syncVersion']);
 const CODEX_PHASES = Object.freeze(['phaseVersion', 'phaseInitialize', 'phaseThread', 'phaseTurn', 'phaseRunning']);
 const safeFailure = value => CODEX_ERRORS.includes(value) ? value : 'codexRequestFailed';
 function nativeFailure(error) {
@@ -43,6 +44,10 @@ class CodexSession extends EventEmitter {
     if (this.closed) throw new Error('codexDisconnected');
     if (!version(probe)) throw new Error('codexVersionProbe');
     if (version(probe) !== CODEX_VERSION) throw new Error('codexUnsupported');
+    if (this.options.connect) {
+      this.transport = await this.options.connect(message => this.receive(message), reason => this.stop(reason || 'codexDisconnected'));
+      if (this.closed) { this.transport.close(); throw new Error('codexDisconnected'); }
+    } else {
     try { this.child = (this.options.spawn || spawn)(this.spec.file, [...this.spec.prefix, 'app-server'], {
       cwd, shell: false, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'],
       env: this.options.env || { ...process.env, NO_COLOR: '1', FORCE_COLOR: '0' },
@@ -63,12 +68,16 @@ class CodexSession extends EventEmitter {
     this.child.stdout.on('error', () => this.stop('codexDisconnected'));
     this.child.stdout.on('end', () => this.stop('codexDisconnected'));
     this.child.on('error', () => this.stop('codexSpawnFailed')); this.child.on('exit', () => this.stop('codexExited'));
+    }
     this.phase('phaseInitialize');
-    await this.rpc('initialize', { clientInfo: { name: 'codex_anydevice', title: 'Codex AnyDevice', version: '0.3.3' } });
+    await this.rpc('initialize', { clientInfo: { name: 'codex_anydevice', title: 'Codex AnyDevice', version: '0.4.0' },
+      ...(this.options.historyMode === 'paginated' ? { capabilities: { experimentalApi: true } } : {}) });
     this.write({ method: 'initialized', params: {} });
+    await this.options.onReady?.(this);
   }
 
   write(message) {
+    if (!this.closed && this.transport) { this.transport.send(message); return; }
     if (this.closed || !this.child?.stdin.writable) throw new Error('codexDisconnected');
     this.child.stdin.write(JSON.stringify(message) + '\n');
   }
@@ -87,7 +96,15 @@ class CodexSession extends EventEmitter {
   receive(message) {
     if (!message || typeof message !== 'object' || this.closed) return;
     const task = this.active; const params = message.params || {};
+    if (this.transport && message.method === 'anydevice/desktopJoined' && params.threadId === task?.threadId) {
+      task.desktopJoined = true; return;
+    }
     if (message.method && Object.hasOwn(message, 'id')) {
+      if (this.transport && task?.threadId && params.conversationId === task.threadId && params.threadId !== task.threadId) {
+        this.write({ id: message.id, error: { code: -32601, message: 'Unsupported request' } });
+        this.stop('codexUnsupportedRequest'); return;
+      }
+      if (this.transport && (!task?.threadId || params.threadId !== task.threadId)) return;
       const id = message.id;
       if (!(typeof id === 'string' || Number.isSafeInteger(id)) || this.seenRequests.has(id)) { this.stop('codexProtocol'); return; }
       if (this.seenRequests.size >= 4096) { this.failure = 'codexUnsupportedRequest'; this.stop(); return; }
@@ -170,6 +187,7 @@ class CodexSession extends EventEmitter {
     try {
       this.phase('phaseThread');
       const result = await this.rpc('thread/start', { cwd, approvalPolicy: 'on-request', approvalsReviewer: 'user', sandbox: 'workspace-write',
+        ...(this.options.historyMode === 'paginated' ? { historyMode: 'paginated' } : {}),
         // cwd is an implicit workspace root. writable_roots lists additional roots only.
         config: { 'sandbox_workspace_write.network_access': false, 'sandbox_workspace_write.writable_roots': [],
           'sandbox_workspace_write.exclude_slash_tmp': true, 'sandbox_workspace_write.exclude_tmpdir_env_var': true } });
@@ -184,6 +202,9 @@ class CodexSession extends EventEmitter {
       }
       task.threadId = result.thread.id;
       this.emit('policy', { readOnly });
+      await this.options.onThread?.(task.threadId);
+      this.emit('thread', task.threadId);
+      if (this.active !== task || this.closed) return completion;
       if (task.cancelRequested) { this.finish('cancelled'); return completion; }
       this.phase('phaseTurn'); this.turnRequested = true;
       let turn;
@@ -222,11 +243,18 @@ class CodexSession extends EventEmitter {
       error: this.failure, phase: this.currentPhase });
   }
   stop(reason) {
-    if (this.closed) return; this.closed = true;
+    if (this.closed) return;
+    // A shared backend belongs to the official extension. Only interrupt our own turn.
+    if (this.transport && this.active?.threadId && this.active?.turnId) {
+      try { this.write({ id: ++this.counter, method: 'turn/interrupt',
+        params: { threadId: this.active.threadId, turnId: this.active.turnId } }); } catch {}
+    }
+    this.closed = true;
     if (reason || this.active) this.failure ||= safeFailure(reason || 'codexDisconnected');
     this.finish(this.active && !this.turnRequested ? 'failed' : 'unknown');
     for (const request of this.pending.values()) { clearTimeout(request.timer); request.reject(new Error(this.failure || 'codexDisconnected')); }
     this.pending.clear(); this.buffer = '';
+    if (this.transport) { const transport = this.transport; this.transport = undefined; setTimeout(() => transport.close(), 200); }
     if (this.child && this.child.exitCode === null && this.child.pid) {
       if (process.platform === 'win32' && process.env.SystemRoot) {
         execFile(require('node:path').join(process.env.SystemRoot, 'System32', 'taskkill.exe'),

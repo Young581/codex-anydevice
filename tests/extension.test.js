@@ -32,7 +32,8 @@ test('Chinese status describes configuration progress without asserting phone co
   instance.activate();
   await instance.commands.get('codexAnyDevice.showStatus')();
   assert.equal(instance.calls.length, 1);
-  assert.match(instance.calls[0][1], /0\/3/);
+  assert.doesNotMatch(instance.calls[0][1], /\d\/3/);
+  assert.match(instance.calls[0][1], /未连接|disconnected/);
 });
 
 test('English status describes configuration progress without asserting phone connectivity', async () => {
@@ -40,7 +41,8 @@ test('English status describes configuration progress without asserting phone co
   instance.activate();
   await instance.commands.get('codexAnyDevice.showStatus')();
   assert.equal(instance.calls.length, 1);
-  assert.match(instance.calls[0][1], /0\/3/);
+  assert.doesNotMatch(instance.calls[0][1], /\d\/3/);
+  assert.match(instance.calls[0][1], /未连接|disconnected/);
 });
 
 test('setup reuses one webview with a restrictive CSP', async () => {

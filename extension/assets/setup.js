@@ -23,9 +23,8 @@ function update(model) {
     if (element) element.textContent = value;
   }
   document.documentElement.lang = model.language;
-  byId('pathsLabel').textContent = model.language.startsWith('zh') ? '手动指定运行时' : 'Choose runtime paths';
-  byId('stage').textContent = model.complete ? t.ready : t.preparing;
-  byId('progress').textContent = `${t.progress} ${model.completed}/3`;
+  byId('stage').textContent = model.direct?.paired ? t.paired : t[model.direct?.status] || t.disconnected;
+  byId('progress').textContent = model.direct?.paired ? t.readyTask : t.needsPairing;
   byId('botState').textContent = model.ready.bot ? t.botSaved : t.botMissing;
   byId('identityState').textContent = model.ready.identity ? t.identitySaved : t.identityMissing;
   if (model.direct?.paired) byId('identityState').textContent = t.paired;
@@ -54,6 +53,13 @@ function update(model) {
   byId('pair').disabled = model.busy || direct.status !== 'connected' || direct.busy;
   byId('cancel').disabled = model.busy || !direct.busy;
   byId('showResult').disabled = model.busy || !direct.hasResult;
+  byId('openThread').disabled = model.busy || !direct.hasThread || !model.sync?.enabled;
+  byId('enableSync').disabled = model.busy || Boolean(model.sync?.enabled);
+  byId('disableSync').disabled = model.busy || !model.sync?.enabled;
+  byId('disableSync').hidden = !model.sync?.enabled;
+  byId('syncState').textContent = model.sync?.ready ? t.syncReady : model.sync?.enabled ? t.syncConfigured : t.syncDisabled;
+  byId('pair').textContent = t.pair;
+  byId('pair').hidden = Boolean(direct.pairingCode || direct.paired);
   byId('pairBox').hidden = !direct.pairingCode;
   byId('pairingCode').textContent = direct.pairingCode ? '/pair ' + direct.pairingCode : '';
   byId('taskState').textContent = direct.task ? t.phoneStatus + direct.task.id + ' · ' + (t[direct.task.status] || t.unknown)

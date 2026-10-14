@@ -6,11 +6,12 @@ const { SetupStore, readiness, setupSummary, validAppId, validSecret, validSende
 const { strings } = require('./strings');
 const { checkEnvironment, resolveCodex } = require('./runtime');
 const { DirectController } = require('./direct-controller');
+const { SharedIntegration } = require('./shared-integration');
 const { render } = require('./webview');
 
 const ACTIONS = new Set(['check', 'credentials', 'identity', 'selectProject', 'preview',
   'guide', 'identityGuide', 'installGuide', 'createBot', 'clear', 'chooseCodex',
-  'connect', 'disconnect', 'pair', 'cancel', 'showResult']);
+  'connect', 'disconnect', 'pair', 'cancel', 'showResult', 'enableSync', 'disableSync', 'openThread']);
 const LINKS = {
   createBot: 'https://q.qq.com/',
   installGuide: 'https://learn.chatgpt.com/docs/cli',
@@ -28,13 +29,16 @@ class SetupController {
     this.environment = undefined;
     this.notice = '';
     this.panel = undefined;
+    this.shared = options.shared || new SharedIntegration(vscode, context, this.t);
     this.direct = new DirectController(vscode, context, this.store, this.t, {
+      createSession: spec => this.shared.createSession(spec),
       ...options.direct, onChange: () => { void this.refresh().catch(() => {}); },
     });
     this.listeners = [];
     const invalidate = () => { void this.direct.disconnect().catch(() => {}); };
     if (vscode.workspace.onDidChangeConfiguration) this.listeners.push(vscode.workspace.onDidChangeConfiguration(event => {
       if (event.affectsConfiguration('codexAnyDevice.codexPath')) { this.environment = undefined; invalidate(); }
+      if (event.affectsConfiguration('chatgpt.cliExecutable')) { this.shared.ready = false; invalidate(); }
     }));
     if (vscode.workspace.onDidChangeWorkspaceFolders) this.listeners.push(vscode.workspace.onDidChangeWorkspaceFolders(invalidate));
     if (context.secrets.onDidChange) this.listeners.push(context.secrets.onDidChange(event => {
@@ -64,7 +68,7 @@ class SetupController {
     const completed = Object.values(ready).filter(Boolean).length;
     return { strings: this.t, language: this.vscode.env.language, ready, completed,
       complete: completed === 3, project: state.project, environment: this.environment,
-      direct: this.direct.snapshot(), busy: this.busy, notice: this.notice };
+      direct: this.direct.snapshot(), sync: this.shared.snapshot(), busy: this.busy, notice: this.notice };
   }
 
   async refresh() {
@@ -99,7 +103,13 @@ class SetupController {
       else if (action === 'identityGuide') await this.openDocument('docs/qq-identity.md');
       else if (action === 'clear') await this.clear();
       else if (action === 'chooseCodex') await this.chooseRuntime();
-      else if (action === 'connect') await this.direct.connect(await this.resolveCodex(this.codexOptions()));
+      else if (action === 'connect') {
+        await this.checkRuntime();
+        await this.direct.connect(await this.resolveCodex(this.codexOptions()));
+      }
+      else if (action === 'enableSync') { await this.direct.disconnect(); await this.shared.enable(await this.resolveCodex(this.codexOptions())); }
+      else if (action === 'disableSync') { await this.direct.disconnect(); await this.shared.disable(); }
+      else if (action === 'openThread' && this.direct.latestThread) await this.shared.openThread(this.direct.latestThread);
       else if (action === 'pair') this.direct.pair();
       else if (action === 'cancel') await this.direct.cancel();
       else if (action === 'showResult' && this.direct.output) {
@@ -110,7 +120,8 @@ class SetupController {
       const allowed = ['incomplete', 'invalidProject', 'noProject', 'botRequired', 'connectRequired', 'codexMissing',
         'codexUnsupported', 'connectionBusy', 'qqNotConnected', 'qqDenied', 'qqNetwork', 'qqProtocol',
         'qqEndpoint', 'qqEndpointTransport', 'qqEndpointHost', 'qqEndpointPath', 'qqEndpointOptions',
-        'qqShards', 'qqRuntime', 'configurationChanged', 'storageFailed'];
+        'qqShards', 'qqRuntime', 'configurationChanged', 'storageFailed', 'syncPlatform', 'syncVersion', 'syncOverride',
+        'syncSetupFailed', 'syncUnavailable', 'syncChanged', 'syncBusy', 'syncNotReady'];
       this.notice = allowed.includes(error.message) ? this.t[error.message] : this.t.operationFailed;
       await this.vscode.window.showErrorMessage(this.notice);
     } finally {
