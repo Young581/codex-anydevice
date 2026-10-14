@@ -1,53 +1,31 @@
 # QQ 身份怎么获取
 
-**你可以先跳过这一步。** 0.2.3 还没有连接 QQ，不能自动取得身份或完成配对。先保存机器人信息、选择项目即可保留准备进度；身份仍显示“待配对”，不会因此开放任务执行。
+**0.3.0 自动取得身份，无需查找 QQ 号码或手填 ID。** 保存机器人信息和项目后，点击 **连接 QQ → 开始配对**，用本人 QQ 私聊发送页面上的 `/pair 一次性代码`，最后在电脑确认。
 
-## 为什么要登记身份
+AppID/AppSecret 认证机器人，OpenID 识别发消息的用户。只接受配对后的本人私聊，防止其他人用机器人在电脑执行任务。Codex 请求审批在电脑处理，本版不接受 QQ 审批指令。
 
-AppID/AppSecret 让插件以机器人的身份连接腾讯；用户 OpenID 用来辨认发消息的人。插件需要知道哪些消息是你发的，才能把任务请求和审批回答限制为本人。两者作用不同，机器人密钥不能代替用户身份授权。
+身份来自同一机器人收到的 `C2C_MESSAGE_CREATE` **外层** `author.user_openid`；WebSocket 封套为 `d.author.user_openid`。它不是 QQ 号码、昵称、AppID、群身份或 union OpenID，不能通过 QQ 号码推算。确认框只在本机显示真实 OpenID，不要贴到公开聊天或 Issue。
 
-向导中的 OpenID 是 QQ 官方单聊事件的 `author.user_openid`，不是 QQ 号码、昵称或 AppID，也不应使用群聊的 `member_openid`、`group_openid` 或跨应用的 `union_openid`。不能通过 QQ 号码换算。只能使用自己向**同一个机器人**发送消息得到的身份；更换 AppID 后重新取得，插件会清除旧登记。
+## 配对
 
-## 个人用户现在怎么做
+机器人后台需允许本人测试/使用、WebSocket 与私聊。代码 5 分钟有效、最多 5 次尝试且只能用一次；拒绝或过期需重新开始。电脑显示真实发信人及项目，只有明确确认本人后才授权任务。无需另建消息接收服务。
 
-1. 尚未创建机器人：先在 [QQ 开放平台](https://q.qq.com/)创建官方机器人，按后台实际权限配置测试/使用账号，再在向导保存 AppID/AppSecret；密钥只填本机密码框。
-2. 尚未接入消息：先选择项目并保留进度，无需为了完成向导另外搭建事件接收服务，也不用填写 QQ 号码或猜测 ID。当前插件不能自动取得 OpenID，“QQ 身份怎么获取”按钮只打开本说明。
-3. 后续接入的自动配对流程计划为：电脑开启短时配对 → 本人 QQ 私聊机器人发送一次性配对码 → 插件从腾讯事件取得 OpenID → 电脑明确确认 → 保存允许身份。实现后无需查找或手填 OpenID；当前版本尚无配对码或配对指令。
+重启、主动断开或修改配置后需重新配对，手工填过 OpenID 也一样。连接失败时可保留其他准备资料。
 
-## 已有机器人接收程序时的手动获取方式
+## 高级手工登记
 
-这条途径仅供已经能接收自己机器人事件的开发者使用，不是个人用户现在必须完成的步骤。
+已有官方事件接收程序的开发者，可从自己给**此机器人**的新私聊外层 `author.user_openid` 取得身份。保存机器人资料后展开 **高级：已取得 OpenID → 登记已有 OpenID**。仅登记资料、显示待验证，不自动授权；不得使用群聊或引用消息中其他人的身份。
 
-1. 确认该机器人后台允许本人测试/使用与单聊事件。按腾讯官方[事件订阅说明](https://bot.q.qq.com/wiki/develop/api-v2/dev-prepare/interface-framework/event-emit.html)接入已获准的 WebSocket 或 Webhook，订阅 `GROUP_AND_C2C_EVENT` 中的 `C2C_MESSAGE_CREATE`。Webhook 需要实际可用的 HTTPS 回调，不能仅在手机发消息就取得 ID。
-2. 用本人的 QQ 向该机器人发一条普通私聊消息，例如“测试”。不会因为这条消息自动授权或执行 Codex 任务。
-3. 在自己的事件接收程序中检查这一条新消息的**外层发信人** `author.user_openid`；不要取转发/引用消息内其他人的 `author`。WebSocket 完整事件封套中通常为 `d.author.user_openid`；SDK 已取出事件体时为 `author.user_openid`。
-4. 回到向导展开 **高级：已取得 OpenID**，选择 **登记已有 OpenID**，填入本机。登记只保存计划的允许身份，页面标为“已登记，待验证”，不代表配对或访问控制已验收。
-
-下例是合成的 WebSocket 事件字段片段，省略消息正文和其他字段：
+合成字段示例：
 
 ```json
-{
-  "t": "C2C_MESSAGE_CREATE",
-  "d": {
-    "author": {
-      "user_openid": "synthetic_user_openid"
-    }
-  }
-}
+{ "t": "C2C_MESSAGE_CREATE", "d": { "author": { "user_openid": "synthetic_user_openid" } } }
 ```
-
-不要把真实事件正文、OpenID 或密钥粘贴到公开 Issue 或聊天中。手动录入错误无法仅凭字符串格式验证，正式执行前仍需电脑确认配对与真实身份拒绝验收。
 
 ## English
 
-You can skip this step for now. Version 0.2.3 does not connect to QQ or pair a user yet; bot and project details can be saved independently. Identity authorization is necessary to restrict task requests and approvals to you. The bot credentials authenticate the bot; they do not authorize every sender.
-
-The user OpenID comes from the outer sender's `author.user_openid` in your own `C2C_MESSAGE_CREATE` event to the same bot. It is not a QQ account number, nickname, AppID, group/member OpenID or union OpenID. A QQ account number cannot be converted into it.
-
-If your existing bot receiver already handles official events, send a private message from your own QQ and inspect `d.author.user_openid` in a WebSocket envelope, or `author.user_openid` in the decoded event body. After saving bot credentials, expand **Advanced: I already have an OpenID** to record it locally. It is recorded metadata, pending verification. Ordinary users do not need to build a receiver just to prepare this wizard.
-
-The planned automatic flow is: open a short-lived pairing window on the computer, send a one-time code to the bot from your own QQ, receive the sender OpenID, and explicitly confirm on the computer. This is not implemented yet. No current pairing command or code is available.
+Version 0.3.0 obtains OpenID automatically: connect, start pairing, send `/pair CODE` from your own private QQ chat and explicitly confirm on the computer. The identity comes from the outer `author.user_openid` in your C2C event to the same bot. It is not your QQ account number. Manual metadata still needs pairing. Restarts and explicit disconnect revoke verification. Requested approvals stay on the computer.
 
 ## 官方依据
 
-2026-10-14 实际获取腾讯官方 [单聊消息事件](https://bot.q.qq.com/wiki/develop/api-v2/autogen/event/c2c_message_create.html)（页面标注更新于 2026-09-16）、[发送单聊消息](https://bot.q.qq.com/wiki/develop/api-v2/autogen/api/v2_users_user_openid_messages.post.html)（页面标注更新于 2026-09-03）及[事件订阅说明](https://bot.q.qq.com/wiki/develop/api-v2/dev-prepare/interface-framework/event-emit.html)。字段来源与拟实现的配对流程分别说明；未接触真实账号或事件。
+2026-10-14 实际获取[单聊事件](https://bot.q.qq.com/wiki/develop/api-v2/autogen/event/c2c_message_create.html)、[单聊发送](https://bot.q.qq.com/wiki/develop/api-v2/autogen/api/v2_users_user_openid_messages.post.html)与[事件订阅](https://bot.q.qq.com/wiki/develop/api-v2/dev-prepare/interface-framework/event-emit.html)。真实机器人和手机配对尚需验收。

@@ -28,6 +28,7 @@ function update(model) {
   byId('progress').textContent = `${t.progress} ${model.completed}/3`;
   byId('botState').textContent = model.ready.bot ? t.botSaved : t.botMissing;
   byId('identityState').textContent = model.ready.identity ? t.identitySaved : t.identityMissing;
+  if (model.direct?.paired) byId('identityState').textContent = t.paired;
   byId('botState').classList.toggle('done', model.ready.bot);
   byId('identityState').classList.toggle('done', model.ready.identity);
   byId('projectName').textContent = model.project?.name || t.projectMissing;
@@ -42,6 +43,23 @@ function update(model) {
   for (const button of document.querySelectorAll('button[data-action]')) {
     button.disabled = model.busy || (!model.complete && button.dataset.action === 'preview');
   }
+  const direct = model.direct || { status: 'disconnected' };
+  const active = ['connected', 'connecting', 'reconnecting'].includes(direct.status);
+  byId('connectionState').textContent = t[direct.status] || t.unknown;
+  byId('pairState').textContent = direct.paired ? t.paired : t.identityMissing;
+  byId('connectionState').classList.toggle('done', direct.status === 'connected');
+  byId('pairState').classList.toggle('done', Boolean(direct.paired));
+  byId('connect').disabled = model.busy || active || !model.ready.bot || !model.ready.project;
+  byId('disconnect').disabled = !active && !model.busy;
+  byId('pair').disabled = model.busy || direct.status !== 'connected' || direct.busy;
+  byId('cancel').disabled = model.busy || !direct.busy;
+  byId('showResult').disabled = model.busy || !direct.hasResult;
+  byId('pairBox').hidden = !direct.pairingCode;
+  byId('pairingCode').textContent = direct.pairingCode ? '/pair ' + direct.pairingCode : '';
+  byId('taskState').textContent = direct.task ? t.phoneStatus + direct.task.id + ' · ' + (t[direct.task.status] || t.unknown) : t.noTask;
+  byId('directError').textContent = direct.error ? t[direct.error] || t.operationFailed : '';
+  byId('deliveryState').textContent = direct.deliveryFailed ? t.deliveryFailed : '';
+  byId('sandboxState').textContent = direct.readOnly ? t.codexReadOnly : '';
   byId('check').textContent = model.busy ? t.checking : t.check;
 }
 

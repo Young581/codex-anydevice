@@ -86,9 +86,9 @@ test('direct setup summary keeps the secret private and reports the pending conn
   const f = fixture(t); await f.controller.store.saveBot(appId, secret);
   await f.controller.store.saveSender(senderId); await f.controller.store.saveProject(f.project);
   const config = setupSummary(f.controller.store.read());
-  assert.equal(config.mode, 'direct'); assert.equal(config.phoneConnection, 'pendingDevelopment');
+  assert.equal(config.mode, 'direct'); assert.equal(config.phoneConnection, 'requiresExplicitConnectionAndPairing');
   assert.equal(config.plannedAuthorization.allowedSenderId, senderId);
-  assert.equal(config.plannedAuthorization.approvalSenderId, senderId);
+  assert.equal(config.plannedAuthorization.approvalLocation, 'desktop');
   assert.equal(config.plannedAuthorization.groups, 'disabled');
   assert.doesNotMatch(JSON.stringify(config), new RegExp(secret));
   await f.controller.open(); await f.controller.refresh(); const model = f.messages.at(-1).model;

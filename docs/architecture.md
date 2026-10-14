@@ -1,55 +1,52 @@
 # 架构与控制边界
 
-此文为待实现设计，不是当前运行能力。
+0.3.0 已实现个人 QQ 官方 WebSocket 与 Codex 新线程原型，实际账号、手机与模型任务待验收。
 
 ```mermaid
 flowchart LR
-  Phone[手机 QQ] --> Channel[QQ 官方机器人接口]
-  Channel --> Adapter[AnyDevice QQ 连接与鉴权]
-  Adapter --> Policy[身份与项目授权 / 会话路由]
-  Policy --> Codex[原生 Codex app-server]
-  Codex --> Project[允许执行的项目]
-  Codex --> Adapter
-  Adapter --> Channel
-  Channel --> Phone
-  VSCode[VS Code AnyDevice] --> Policy
-  Policy --> VSCode
+  Phone[本人 QQ 私聊] --> QQ[QQ 官方接口]
+  QQ --> Client[qq-client 鉴权与连接]
+  Client --> Control[direct-controller 配对/授权/去重]
+  Control --> Native[codex-session 本地 stdio]
+  Native --> Codex[Codex 新线程与沙箱]
+  Codex --> Project[授权项目]
+  VSCode[VS Code 原生确认] --> Control
+  Codex --> Native --> Control --> Client --> QQ --> Phone
 ```
 
-## 执行位置
-
-第一版执行位于用户选择项目的本机。AnyDevice 直接连接 QQ 官方接口，用本机 stdio 调用 Codex app-server；手机使用腾讯消息渠道。QQ WebSocket 的实际账号准入需验证；Webhook 是需要 HTTPS 回调的另一种部署方式。电脑休眠、离线或 VS Code 退出后的行为必须明确显示。
-
-新任务原型由扩展管理自己的 stdio app-server 连接和新建线程。连接生命周期跟随本地扩展宿主；关闭窗口或重载时停止接收新任务，正在执行的任务须按取消/未知状态记录，不能把断连视为完成。独立常驻服务属于后续可选场景，当前不增加用户安装步骤。
-
-本地窗口在本地执行；Remote SSH/容器窗口对应其远端项目。尚未实现的远端部署不自动转回本机运行，不通过手机消息创建任意 SSH 连接。
-
-## 模块边界
+## 模块与生命周期
 
 | 模块 | 责任 |
 | --- | --- |
-| VS Code 扩展 | 项目登记与授权、任务与会话列表、交接界面、配置与诊断 |
-| QQ 渠道适配 | 腾讯官方鉴权、令牌刷新、事件订阅、心跳与恢复、原始身份和结果回传 |
-| 扩展控制层 | 项目别名路由、权限、消息去重、并发与恢复；普通指令使用明确解析规则 |
-| Codex 后端 | 官方 app-server 原生线程、轮次、审批与事件 |
-| 状态存储 | 最小路由与操作状态；单独定义隐私保留与清理 |
+| setup-controller / setup-model | 向导、SecretStorage、项目与配置变更撤销 |
+| qq-client | token、单分片 WSS、C2C、心跳/ACK、Resume、刷新、有界重试和被动回复 |
+| direct-controller | 配对、电脑授权、串行队列、匿名去重、单任务、取消与审批 |
+| codex-session | 精确版本、stdio、独立线程/轮次、有效策略检查、准确请求匹配与中断 |
 
-0.2.3 已实现本地配置向导、状态栏、SecretStorage 凭据保存、项目选择与 Codex CLI 检测，保留 0.2.0 配置数据。身份获取说明区分机器人认证与用户授权，手动登记需已有机器人资料且仍待配对验证。CLI 认证检测区分 ChatGPT 登录和 API Key，未检测到 OpenAI 认证时不推断自定义服务商不可用；只提供受限状态，不验证请求或代替当前编辑器会话状态。配置摘要只描述准备资料和计划的授权，不能当作已经生效的访问控制。QQ 连接、控制层和 Codex 执行仍待实现；OpenClaw 不再属于运行路线。
+激活不自动连接或读取密钥，不重放任务；用户授权后连 QQ，`/new` 才启动拥有的子进程。每个任务一个新线程，不读取或接管旧线程。退出、重载、断开或终止连接失败撤销验证、停止拥有的进程并标记未知结果。Windows 按创建的子进程 PID 清理其进程树。
 
-## 身份、项目和请求
+同一 OS 用户下，用 AppID 派生的 loopback 端口跨窗口占用，监听立即销毁入站连接，不提供控制接口或数据。OS 在进程退出时释放；碰撞或其他端口占用保守拒绝。
 
-每个指令绑定 `channel + accountId + senderId + conversationId + projectId + threadId`；不得使用昵称或聊天标题作为身份。QQ OpenID 随机器人账号变化。默认私聊，允许聊天与允许审批分别管理。
+## 身份、项目与去重
 
-手机仅传项目别名；项目路径由电脑端显式登记。跨项目和绝对路径输入不自动获得授权。每个原生 thread 只有一个可写控制者；文件修改以 Codex 自身权限和沙箱为基础，不接受任意 shell 文本作为网关命令。
+只处理外层 C2C 私聊身份，禁用群聊与引用身份。8 位随机十六进制代码 5 分钟、最多 5 次、一次性并经电脑确认。一个 OpenID，持久登记不等于内存验证；重启和主动断开重新配对。修改机器人、身份、项目、Codex 路径先撤销连接。
 
-消息 ID、操作 ID、thread ID 和 turn ID 分别记录；指令重放不能简单再次执行。重启后结果不确定的操作标为“状态未确认”，查证后继续。不能从网络层的确认推断项目已成功修改。
+项目从当前本地工作区明确选择并核对真实目录，执行和审批前重查。手机不传路径，任务正文是模型输入，不能用命令文本解析替代原生沙箱。所选目录不是完整读取边界。
 
-审批携带准确 request ID、thread/turn 和到期时间，只能由指定审批人回答；过期、已解决和错会话答复无效。拒绝或超时不能变成批准。异步提问的回复是续聊或 steer，不能套用阻塞工具审批语义。
+消息队列最多 32，执行独立于队列，运行中可响应状态/取消。一个控制器一个活跃任务，一个新线程一个写入者。执行前持久保存 SHA-256(AppID、sender、messageID)，最多 512 条；淘汰推进时间截断，旧事件保守拒绝。保存失败停止接收；重启活跃状态为 unknown，不重放。该日志不是文件事务或恰好一次执行保证。
 
-## 状态
+日志仅含哈希、时间、最近随机任务 ID/状态，无原始身份、目录、prompt、结果或 native IDs。状态为 starting/running/waitingApproval/cancelling/completed/failed/cancelled/unknown；中断确认前不宣称取消或回滚完成。
 
-`queued → running → waiting_question / waiting_approval → running → completed / failed / cancelled`。断连或无法核实完成时使用 `unknown`。结束一轮只表示该轮结束；后台部署、训练等外部工作需另有证据。
+## 原生策略与审批
 
-## 与 Beacon 共存
+锁定 **0.162.0-alpha.17.2**，使用 `on-request` 与 `approvalsReviewer: user`，继承 CLI 认证、模型和服务商。请求单项目 workspace-write、工具网络关闭及临时额外写入关闭；核对返回有效策略才发起轮次。更严格 readOnly 保留并提示，其余不匹配拒绝。精确证据见[原型](qq-direct-poc.md)。
 
-使用 `Young581.codex-anydevice`、`codexAnyDevice.*` 和独立存储目录。Beacon 的历史、Hook、证书、隐私暂停和设置不被迁移或覆盖。未来若复用 Beacon 源码，必须保留原 MIT 版权并登记来源；本次骨架没有复制它的运行时代码。
+请求精确绑定 requestId/threadId/turnId/itemId 与原生 startedAtMs，最多 2 分钟。电脑显示完整有界请求，仅 accept/decline，不自动审批、会话批准或持久规则。已解决、过期、结束、取消、配置变化的窗口不能允许其他请求。
+
+缺少内容的文件审批、会话 grantRoot、终端输入、权限工具、动态工具、MCP elicitation 与提问等未实现请求拒绝或停止，不伪装成功。结果仅取 agentMessage 完成事件，最新最多 20,000 字符留内存，QQ 返回摘要，失败在桌面显示。
+
+## 渠道边界
+
+腾讯文档中的 api.bot.qq.com API/WSS，拒绝重定向和未核对 gateway 地址。单分片，最多 6 次连续恢复尝试；无 ACK 重连，token 到期前刷新。错误正文不进入 UI。回复使用 msg_id/msg_seq，保守 5 分钟与最多 4 次，不盲目重试或提供主动额度回退。
+
+电脑持续运行；Webhook、多分片、微信、远程宿主和后台服务后续独立开发。`Young581.codex-anydevice`、`codexAnyDevice.*` 与存储独立，不修改 Beacon 的设置、Hook、证书或缓存。日志观察、fork、原线程续聊与运行中接管分别验收。

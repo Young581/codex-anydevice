@@ -3,5 +3,8 @@
   "command.checkEnvironment": "检查 Codex 环境",
   "config.codexPath": "Codex 的绝对路径。留空时从 PATH 或已安装的 Codex 扩展发现。",
   "command.openResearch": "打开调研与开发方案",
-  "command.showStatus": "查看开发状态"
+  "command.showStatus": "查看开发状态",
+  "command.connectQQ": "连接 QQ 官方机器人",
+  "command.disconnectQQ": "断开 QQ 机器人",
+  "command.pairQQ": "配对本人 QQ"
 }

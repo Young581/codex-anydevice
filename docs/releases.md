@@ -1,15 +1,15 @@
 # 构建与发布
 
-0.2.3 为个人 QQ 直连配置准备与身份获取说明，本次不创建正式 Release 或上传 Marketplace。
+0.3.0 为 QQ WebSocket 新任务原型，渠道与模型验收尚未完成，本次不创建正式 Release 或上传 Marketplace。
 
 ## 开发包
 
 ```text
 node scripts/check.js
-node --test tests/extension.test.js tests/setup.test.js tests/runtime.test.js
+node --test tests/extension.test.js tests/setup.test.js tests/runtime.test.js tests/direct.test.js
 python -B tests/package_validation.py
 python -B build.py --output dist
-python -B packaging/release-audit.py dist/codex-anydevice-0.2.3.vsix
+python -B packaging/release-audit.py dist/codex-anydevice-0.3.0.vsix
 ```
 
 离线构建只读取 `packaging/package_policy.py` 的白名单，固定 ZIP 时间戳，不包含本机状态、凭据、测试输出或 `.git`。CI 上传 Windows 生成的开发包；Linux/macOS 同样验证和构建。

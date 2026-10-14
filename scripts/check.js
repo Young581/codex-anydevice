@@ -19,6 +19,11 @@ assert.equal(manifest.devDependencies, undefined);
 const defaultLocale = readJson('package.nls.json');
 const chineseLocale = readJson('package.nls.zh-cn.json');
 assert.deepEqual(Object.keys(chineseLocale).sort(), Object.keys(defaultLocale).sort());
+const { zh, en } = require('../extension/lib/strings');
+assert.deepEqual(Object.keys(zh).sort(), Object.keys(en).sort());
+for (const text of [...Object.values(chineseLocale), ...Object.values(zh)]) {
+  assert.doesNotMatch(text, /\?{3,}|\uFFFD/, 'Damaged Chinese localization');
+}
 for (const command of manifest.contributes.commands) {
   assert.ok(command.command.startsWith('codexAnyDevice.'));
   const key = command.title.replace(/^%|%$/g, '');
@@ -44,6 +49,7 @@ const markdown = ['README.md', 'README.en.md', 'CHANGELOG.md', 'CONTRIBUTING.md'
   'PRIVACY.md', 'SECURITY.md', 'UPSTREAM.md', ...docs];
 for (const name of markdown) {
   const body = fs.readFileSync(path.join(root, name), 'utf8');
+  assert.doesNotMatch(body, /\?{3,}|\uFFFD/, `${name}: damaged text encoding`);
   for (const match of body.matchAll(/\]\(([^)]+)\)/g)) {
     const href = match[1];
     if (/^(?:https?:|#|mailto:)/.test(href)) continue;

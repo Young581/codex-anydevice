@@ -1,24 +1,28 @@
 # Codex AnyDevice
 
-[简体中文](README.md) · [Research](docs/research.md) · [Roadmap](docs/roadmap.md) · [Maintenance](docs/maintenance.md)
+[简体中文](README.md) · [Setup](docs/setup.md) · [Research](docs/research.md) · [Maintenance](docs/maintenance.md)
 
-A planned VS Code extension for controlling local Codex work directly from QQ on a phone, with WeChat considered as a later independent channel. Community project; not an official OpenAI, Tencent or Microsoft product.
+Start local Codex tasks from your phone through an official QQ bot. Choose one project, pair your QQ and review Codex approvals in VS Code. For personal use; no OpenClaw dependency. Community project, not an official OpenAI, Tencent or Microsoft product.
 
-**0.2.3 prepares personal QQ direct access.** It checks Codex, saves bot credentials through native password input and SecretStorage, records one QQ identity, selects one project and previews a secret-free setup summary. A [QQ identity guide](docs/qq-identity.md) explains the official OpenID source; manual entry is an advanced option. Bot and project details can be saved before obtaining an identity, and automatic pairing is still pending development. Authentication checks distinguish ChatGPT sign-in from API keys; an undetected OpenAI login does not rule out a custom provider and this check does not validate requests. Progress can be saved before creating a bot. OpenClaw checks, installation prompts and gateway-specific configuration and commands have been removed. QQ messaging and Codex task execution remain to be implemented. No Marketplace release exists.
+**0.3.0 is an official QQ WebSocket prototype.** It implements connection, one-time pairing codes with desktop confirmation, `/new`, `/status`, `/cancel`, result delivery and desktop approvals. Synthetic validation is separate from actual bot eligibility, phone messaging and model execution, which still need acceptance. No Marketplace or formal Release publication exists.
 
-The first milestone is phone-initiated tasks with returned results through **QQ official bot → AnyDevice → local Codex app-server**. The extension will own authentication, reconnection, authorization, deduplication and result delivery. The user flow does not depend on OpenClaw. QQ WebSocket access must be verified for the actual bot; Webhook access needs an HTTPS callback. Keep the computer and VS Code running. Existing conversation continuation, questions and approvals follow; separate Codex processes must not write the same conversation concurrently. See the [direct-access prototype](docs/qq-direct-poc.md).
+Save bot credentials using the native password box and SecretStorage, select a trusted local project, then click **Connect QQ**. Once connected, click **Start pairing**, send the displayed `/pair CODE` in your own QQ private chat and confirm on the computer. OpenID is obtained automatically; manually recorded metadata does not authorize tasks. Send `/new Read README and summarize the project without modifying files` for the first synthetic-project smoke test. Use `/status` and `/cancel`; native approval requests stay on the computer.
 
-Use Node 22+, Python 3.8+ and VS Code 1.96+. No npm dependencies are required:
+Keep the computer and VS Code running. Reconnect and pair after a restart or explicit disconnect. No tasks replay automatically. Only one bot owner, sender, project and active task are supported. Group chat, Webhook, multiple shards, WeChat and existing conversation continuation are not implemented.
+
+Verified Codex version: **0.162.0-alpha.17.2**. Other versions fail closed. Tasks inherit the selected CLI authentication, model and provider; ChatGPT and API keys are supported by Codex and API usage may incur charges. AnyDevice does not read or modify Codex login/configuration files. Custom provider and real model execution need separate acceptance. If native Windows Codex returns a read-only sandbox, the task preserves it and shows a notice; configure sandboxing in official Codex for project writes. Requested approvals require explicit desktop responses. Project selection is not a read-access boundary.
+
+Only the latest bounded agent output stays in memory (20,000 characters); QQ receives a summary. Replies conservatively expire after 5 minutes, with at most four per source message. For longer tasks, use `/status` and desktop results. See [architecture](docs/architecture.md) and [privacy](PRIVACY.md).
+
+Development requires Node 22+ and Python 3.8+ without npm dependencies. QQ needs a recent VS Code host with native fetch/WebSocket; this round uses VS Code 1.141.0.
 
 ```text
 node scripts/check.js
-node --test tests/extension.test.js tests/setup.test.js tests/runtime.test.js
+node --test tests/extension.test.js tests/setup.test.js tests/runtime.test.js tests/direct.test.js
 python -B tests/package_validation.py
 python -B build.py --output dist
 ```
 
-Press F5 in VS Code, click **Codex AnyDevice** in the status bar, or run **Open personal QQ setup wizard**. The wizard supports both languages, editor themes and narrow layouts. Existing 0.2.0 setup data is retained. See [setup instructions](docs/setup.md). Complete setup details are distinct from verified phone connectivity.
+Existing 0.2.x setup data is retained. Repository settings, CI, allowlists and audited release maintenance follow [Codex Beacon](https://github.com/Young581/codex-beacon). CI is not proof of device operation or public release.
 
-Repository settings follow [Codex Beacon](https://github.com/Young581/codex-beacon): public MIT repository, `main`, bilingual documentation, issue forms, Windows/Linux/macOS CI, read-only workflow permissions, explicit package allowlists and SHA-256 checks. Detailed design documents currently use Chinese; command titles and status messages support English and Chinese.
-
-[Contributing](CONTRIBUTING.md) · [Privacy](PRIVACY.md) · [Security](SECURITY.md) · [Release process](docs/releases.md) · [Verification](docs/verification.md)
+[Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [Release process](docs/releases.md) · [Verification](docs/verification.md)

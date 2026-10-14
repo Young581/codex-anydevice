@@ -1,67 +1,69 @@
-# 个人 QQ 配置向导
+# 个人 QQ 直连配置与使用
 
-0.2.3 面向个人 QQ 直连：检测本机 Codex、密码框保存 QQ AppSecret、查看身份获取说明、登记已有 QQ OpenID、选择当前项目并预览配置摘要。用户使用流程不需要 OpenClaw。QQ 连接、自动配对、消息收发和任务执行尚未实现；配置资料齐全只代表准备完成。
+0.3.0 已接入 QQ 官方 WebSocket 与 Codex 新线程原型，不依赖 OpenClaw。真实机器人接入、手机收发及模型任务仍需验收。
 
-## 打开向导
+## 准备电脑与机器人
 
-在受信任的本地项目中点击状态栏 **Codex AnyDevice**，或运行 **Codex AnyDevice: 打开个人 QQ 配置向导**。Remote SSH、容器与虚拟项目本版不进入向导。重开 VS Code 后可以继续已保存的进度。
+安装本地 VSIX 并重载 VS Code，打开受信任的本地项目，点击状态栏 **Codex AnyDevice** 或运行 **打开个人 QQ 配置向导**。Remote SSH、容器与虚拟工作区本版不支持。
 
-## 1. 准备电脑
+**检查 Codex 环境** 仅运行版本和 `login status`，提供有界摘要，不发起模型请求。ChatGPT 登录和 API Key 都由 Codex 支持；未检测到 OpenAI 登录不代表自定义服务商不可用，也不等于当前编辑器会话的认证。任务使用所选 CLI 自己的认证、模型与服务商，API 使用可能计费，AnyDevice 无需再次填写模型密钥。
 
-点击 **检查 Codex 环境**。只运行 `codex --version` 和 `codex login status`，显示版本与认证方式，不显示原始输出、账号邮箱、错误正文或令牌。这里检测的是所发现的 Codex CLI 状态，不等于当前编辑器中 Codex 会话的认证状态。
+Codex 从 PATH、Windows npm 入口或已安装 OpenAI 扩展发现，也可手动指定绝对路径。原型仅核对 **0.162.0-alpha.17.2**，其他版本安全拒绝。npm 入口使用其需要的 Node，调用不经过 shell。QQ 连接需要近期 VS Code 的原生 fetch/WebSocket，缺少能力会提示更新。
 
-**ChatGPT 登录和 API Key 都可用于本地 Codex。** 向导分别显示“已检测到 ChatGPT 登录”和“已检测到 API Key”。“未检测到 OpenAI 认证”仅表示 CLI 没有报告 OpenAI 登录；自定义服务商可以使用自己的环境变量或其他认证配置，需要单独核验，不能据此判为不可用。未知输出或探测失败显示“状态未确认”，不推断已登录。
+在 [QQ 开放平台](https://q.qq.com/)创建官方机器人，按后台要求允许本人测试/使用及私聊。密钥只填本机密码框，保存在 SecretStorage，不进入网页、摘要或日志。更换 AppID 清除旧身份，0.2.x 配置继续使用。
 
-检测不会调用模型或验证密钥有效性，不消耗模型 API 额度，也不检查自定义服务商配置。本插件不读取、复制或修改你的 Codex 登录文件、配置文件或 API Key；无需在 AnyDevice 向导再次填写模型密钥。即使认证未确认，也可以保存 QQ 与项目资料。后续任务执行需另行验收所选 CLI 的实际认证、模型与服务商配置，不能假定它与编辑器当前会话一致。
+QQ 文档列出 WebSocket，但账号权限以实际连接为准。仅支持核对过的官方单分片 WSS 接入点，其他域名保守拒绝；本版未实现需要 HTTPS 回调的 Webhook。
 
-Codex 从 PATH、Windows npm 启动目录或已安装的 OpenAI Codex 扩展发现。Windows 的 `codex.cmd` 转换为 Node 调用对应包入口，不经过命令解释器。npm 入口不可运行时会尝试已安装扩展的原生程序。发现失败时可在页面手动指定 Codex 的绝对路径；设置为机器级，避免项目配置与跨设备同步覆盖它。
+## 连接并自动取得身份
 
-插件运行于 VS Code 自带的扩展宿主；使用 Codex 原生程序时不要求额外安装 OpenClaw 或其 Node 环境。若选择 npm 安装的 Codex，则按 Codex 自身要求准备 Node。页面提供 [Codex 官方使用说明](https://learn.chatgpt.com/docs/cli)。
+1. 选择当前打开的一个本地项目，保存其真实目录。
+2. 点击 **连接 QQ**，在电脑确认授权项目，等待 **QQ 已连接**。
+3. 点击 **开始配对**，页面显示 `/pair 一次性代码`，5 分钟有效、最多 5 次尝试。
+4. 用本人 QQ **私聊**机器人发送该命令；电脑显示真实发信人的 OpenID 和项目，确认刚才是自己发送后点击 **确认是本人**。
+5. 页面显示 **本人 QQ 已配对**，机器人返回命令说明。
 
-## 2. 创建机器人并绑定自己
+身份来自 `C2C_MESSAGE_CREATE` 的外层 `d.author.user_openid`，**无需 QQ 号码或手工找 ID**。群聊与引用身份无效。高级手工登记仅保存资料，每次连接仍需配对，见[身份说明](qq-identity.md)。拒绝、过期或已使用的代码需重新开始。
 
-在 [QQ 开放平台](https://q.qq.com/)创建官方机器人，在本机向导填写 AppID/AppSecret。AppSecret 使用 VS Code 密码输入框和 SecretStorage，不进入网页、剪贴板、配置摘要或日志。取消输入保留原配置；更换 AppID 会清除旧的 QQ 身份绑定，因为 OpenID 随机器人变化。尚未创建机器人时可先选择项目并保存进度。
+主动断开、重载或重启后需重新配对；短时自动重连可保留本次身份。同一机器人多窗口连接会被占用检查拒绝。修改机器人、项目、身份、Codex 路径或清除配置会撤销连接。
 
-点击 **QQ 身份怎么获取** 查看包内[获取说明](qq-identity.md)，无需已有机器人或身份。登记身份是为了将任务和审批限定为本人；AppID/AppSecret 用于连接机器人，不能代替对发信人的授权。
+## 新任务指令
 
-OpenID 来自本人给此机器人的 `C2C_MESSAGE_CREATE` 单聊事件 `author.user_openid`（WebSocket 封套中为 `d.author.user_openid`），不是昵称、QQ 号码或群聊身份，不能用 QQ 号码推算。已经有事件接收程序时，可从这条新私聊的外层发信人读取；先保存机器人信息，再展开 **高级：已取得 OpenID** → **登记已有 OpenID**。当前仅保存登记资料，页面显示“已登记，待验证”，不宣称已完成配对。
+| 指令 | 行为 |
+| --- | --- |
+| `/new 任务内容` | 在授权项目中创建独立 Codex 新线程，一次一个任务 |
+| `/status` | 返回最近任务 ID 与状态，不重放、不创建模型请求 |
+| `/cancel` | 请求中断，确认前显示正在取消 |
 
-没有事件接收程序或尚未创建机器人时，可以先跳过身份步骤并保存其他进度，无需另建服务或填写猜测值。后续直连版本计划采用电脑开启短时配对、本人 QQ 发送一次性代码、插件取得身份、电脑明确确认的流程；当前尚无配对码、配对命令或自动获取按钮。身份尚未取得时不能生成包含允许发信人的摘要，任务和审批授权不会因此放宽。
+首次请在无秘密的合成项目发送：
 
-配置摘要记录计划允许的一个明确发信人、同一审批身份和禁用群聊策略；它不是已生效的访问控制。实际身份拒绝和审批需在直连实现后验收。
+```text
+/new 读取 README，概括项目用途，不修改任何文件，不运行命令。
+```
 
-## 3. 选择项目
+核对接收、运行、结果及实际文件。写文件、运行命令、ChatGPT/API 两种任务另行验收。电脑和 VS Code 必须保持运行；本版不支持既有线程续聊、手机审批、提问回复、群聊、附件或多项目。
 
-向导只允许从当前打开的本地文件夹选择一个项目，保存其真实目录。切换项目通过重新选择完成；不是自动授予当前所有项目。预览或复制前重新检查目录是否存在、是否被链接替换。
+## 电脑审批与沙箱
 
-选定目录只是计划的默认工作目录，不是文件访问沙箱；远程执行时仍需核对 Codex 实际权限、沙箱与信任配置。0.2.3 不执行 Codex 任务，也不改变项目文件。
+Codex 请求审批时，原生确认框显示准确 request/thread/turn/item，以及命令或可用文件变更。仅 **允许此条请求** 表示明确允许；关闭、拒绝或 2 分钟到期均不允许。已解决、跨线程、取消后的窗口不能批准新请求。
 
-## 资料齐全之后
+使用 `on-request` 与 `approvalsReviewer: user`；是否需要审批由 Codex 决定，正常沙箱内操作并非每次弹窗。不使用自动审核、会话级缓存批准或持久规则。完整请求太大、文件审批缺少内容、会话级 grantRoot、终端输入、权限工具、动态工具、MCP elicitation 与用户提问等未支持请求会拒绝或停止任务。
 
-预览的是**已保存资料的摘要**，包含机器人 ID、明确身份、项目和计划的授权策略，不含 AppSecret。`phoneConnection: "pendingDevelopment"` 表示连接功能尚待开发；摘要不是要交给第三方网关导入的配置文件。
+请求 workspace-write、单项目根、工具网络关闭及临时目录额外写入关闭，检查原生返回的有效策略后才提交任务。原生若返回更严格的只读沙箱，任务保留该限制并提示；Windows 如需项目写入，请在官方 Codex 完成其沙箱设置。插件不代改系统沙箱或登录文件。所选工作目录不是完整读取边界；越界请求可能授予该次命令更广权限，需审查完整内容。
 
-下一阶段按 [QQ 直连原型](qq-direct-poc.md)接入腾讯接口和本机 Codex。官方文档列出 WebSocket 长连接，实际权限以机器人后台为准；Webhook 则需要 HTTPS 回调地址。当前没有部署公网服务，不能提前保证每个新账号都无需服务器。
+## 结果与撤销
 
-直连目标是自己的私聊发起新任务、查看进度/结果和取消任务，保留 Codex 的明确审批。扩展直接运行时电脑和 VS Code 需要保持运行。0.2.0 的 `/codex bind`、`/bot-me` 来自旧 OpenClaw 路线，不是本插件已实现的直连命令。
+最新 agent 结果仅在内存保留最多 20,000 字符，**查看本次结果** 打开未保存文档。QQ 返回最多 1,400 字符摘要；源消息按保守 5 分钟期限、最多 4 次回复处理。过期/失败显示回传未确认；长任务请再发 `/status`，正文在电脑查看。
 
-页面显示 **配置资料齐全** 只说明信息准备完成。第一条真实任务、取消、提问与审批测试通过后才能记录手机链路可用。
+终止连接失败会撤销配对、停止拥有的进程、释放占用，将未确认任务标为 unknown。重启保留匿名去重记录与最近任务 ID/状态，不重放。取消超时或意外退出不宣称文件变化已撤销。
 
-## 清除
-
-**清除本插件的配置** 在确认后移除 AppSecret、AppID、QQ 身份和项目选择，仅操作本插件的数据。已经手动导出的文档和消息平台记录需在各自位置管理。若 SecretStorage 删除失败，向导会报告未完成，配置进度已经禁用。升级保留 0.2.0 的资料；旧版手动导出的网关文档与已保存机器设置由用户自行管理。
+预览仍是资料摘要，`phoneConnection: requiresExplicitConnectionAndPairing` 与 `requiresLivePairing: true` 不代表运行时授权。清除经电脑确认后断连，移除本插件密钥、身份、项目与任务记录，保留拒绝旧事件的时间截断。导出文档、Codex 保存的新线程、QQ 消息与机器级运行时路径需自行管理。密钥删除失败会报告未完成，连接已撤销。
 
 ## English
 
-Open **Codex AnyDevice: Open personal QQ setup wizard** in a trusted local folder. Check the computer, enter QQ credentials using native password input, read **How to get my QQ identity**, and choose one project. If you already have your bot-specific OpenID from the outer sender of your own `C2C_MESSAGE_CREATE` event, save bot credentials first and use the advanced manual entry. OpenID is not your QQ account number. Bot and project details can be saved without it; automatic pairing is not implemented yet. Recorded identity metadata is pending verification. See the [identity guide](qq-identity.md). Progress is saved locally; AppSecret is held by VS Code SecretStorage.
+Save official bot credentials, select one trusted local project and connect with desktop consent. Start pairing, send `/pair CODE` from your own QQ private chat and confirm on the computer. OpenID is obtained automatically; manual metadata still requires pairing. Use `/new TASK`, `/status`, `/cancel`. Each task uses a separate thread and existing CLI authentication/model/provider; API calls may incur charges. Verified version: 0.162.0-alpha.17.2.
 
-Version 0.2.3 prepares direct QQ access without an OpenClaw dependency. It checks Codex and retains 0.2.0 setup data. CLI authentication checks distinguish ChatGPT sign-in and API keys. Undetected OpenAI authentication does not rule out a custom provider; unknown or failed checks do not prove sign-in. Checks do not validate requests, spend model API credits or describe the current editor session. AnyDevice does not read, copy or modify Codex authentication/configuration files or API keys. Setup details can be saved regardless of authentication detection. Actual execution with the selected CLI and provider needs separate verification.
-
-The preview summarizes saved details and planned authorization; direct QQ messaging and task execution are still pending development. Actual QQ WebSocket eligibility must be checked for the bot, while Webhook access requires an HTTPS callback. Complete setup details do not prove phone connectivity. Keep VS Code and the computer running for the planned direct mode. A working directory is not a filesystem sandbox.
+Requested approvals stay on the computer, expire after two minutes and require exact request matching. Unsupported requests fail closed. More restrictive native read-only policies are preserved. Restarts revoke pairing and never replay tasks. QQ reply expiry is conservatively five minutes; view bounded results on the computer if delivery fails. Bot eligibility, phone use and real subscription/API execution remain unverified.
 
 ## 官方依据
 
-2026-10-13 实际查阅：[QQ 启动接入](https://bot.q.qq.com/wiki/develop/api-v2/)、[QQ 事件与连接维护](https://bot.q.qq.com/wiki/develop/api-v2/dev-prepare/interface-framework/event-emit.html)、[OpenAI 认证](https://learn.chatgpt.com/docs/auth)、[Codex CLI](https://learn.chatgpt.com/docs/cli)、[Codex App Server](https://learn.chatgpt.com/docs/app-server)。
-
-2026-10-14 重新获取 [OpenAI 认证](https://learn.chatgpt.com/docs/auth)与[配置参考](https://learn.chatgpt.com/docs/config-file/config-reference)，核对本地 API Key 支持、CLI 认证状态命令及 `model_providers.<id>.env_key` / `requires_openai_auth`；据此修正 0.2.2 的状态文案，未测试真实密钥或发起模型请求。
-
-同日重新获取腾讯官方[单聊消息事件](https://bot.q.qq.com/wiki/develop/api-v2/autogen/event/c2c_message_create.html)和[事件订阅说明](https://bot.q.qq.com/wiki/develop/api-v2/dev-prepare/interface-framework/event-emit.html)，按 `C2C_MESSAGE_CREATE` / `author.user_openid` 增加 0.2.3 获取说明；未接收真实事件。
+2026-10-14 重新获取 [Codex App Server](https://learn.chatgpt.com/docs/app-server.md)、[QQ 鉴权](https://bot.q.qq.com/wiki/develop/api-v2/dev-prepare/interface-framework/api-use.html)、[事件与连接](https://bot.q.qq.com/wiki/develop/api-v2/dev-prepare/interface-framework/event-emit.html)、[单聊事件](https://bot.q.qq.com/wiki/develop/api-v2/autogen/event/c2c_message_create.html)与[单聊发送](https://bot.q.qq.com/wiki/develop/api-v2/autogen/api/v2_users_user_openid_messages.post.html)，并以精确版本生成 schema、隔离初始化/线程返回核对，见[原型证据](qq-direct-poc.md)。

@@ -4,11 +4,13 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const { SetupStore, readiness, setupSummary, validAppId, validSecret, validSender } = require('./setup-model');
 const { strings } = require('./strings');
-const { checkEnvironment } = require('./runtime');
+const { checkEnvironment, resolveCodex } = require('./runtime');
+const { DirectController } = require('./direct-controller');
 const { render } = require('./webview');
 
 const ACTIONS = new Set(['check', 'credentials', 'identity', 'selectProject', 'preview',
-  'guide', 'identityGuide', 'installGuide', 'createBot', 'clear', 'chooseCodex']);
+  'guide', 'identityGuide', 'installGuide', 'createBot', 'clear', 'chooseCodex',
+  'connect', 'disconnect', 'pair', 'cancel', 'showResult']);
 const LINKS = {
   createBot: 'https://q.qq.com/',
   installGuide: 'https://learn.chatgpt.com/docs/cli',
@@ -20,11 +22,24 @@ class SetupController {
     this.context = context;
     this.store = new SetupStore(context);
     this.check = options.check || checkEnvironment;
+    this.resolveCodex = options.resolveCodex || resolveCodex;
     this.t = strings(vscode.env.language);
     this.busy = false;
     this.environment = undefined;
     this.notice = '';
     this.panel = undefined;
+    this.direct = new DirectController(vscode, context, this.store, this.t, {
+      ...options.direct, onChange: () => { void this.refresh().catch(() => {}); },
+    });
+    this.listeners = [];
+    const invalidate = () => { void this.direct.disconnect().catch(() => {}); };
+    if (vscode.workspace.onDidChangeConfiguration) this.listeners.push(vscode.workspace.onDidChangeConfiguration(event => {
+      if (event.affectsConfiguration('codexAnyDevice.codexPath')) { this.environment = undefined; invalidate(); }
+    }));
+    if (vscode.workspace.onDidChangeWorkspaceFolders) this.listeners.push(vscode.workspace.onDidChangeWorkspaceFolders(invalidate));
+    if (context.secrets.onDidChange) this.listeners.push(context.secrets.onDidChange(event => {
+      if (event.key === require('./setup-model').SECRET_KEY) invalidate();
+    }));
   }
 
   local() {
@@ -49,7 +64,7 @@ class SetupController {
     const completed = Object.values(ready).filter(Boolean).length;
     return { strings: this.t, language: this.vscode.env.language, ready, completed,
       complete: completed === 3, project: state.project, environment: this.environment,
-      busy: this.busy, notice: this.notice };
+      direct: this.direct.snapshot(), busy: this.busy, notice: this.notice };
   }
 
   async refresh() {
@@ -66,12 +81,14 @@ class SetupController {
   }
 
   async act(action) {
+    if (action === 'disconnect') { await this.direct.disconnect(); await this.refresh(); return; }
     if (this.busy || !ACTIONS.has(action)) return;
     if (!this.local()) return this.vscode.window.showInformationMessage(this.t.localOnly);
     this.busy = true;
     this.notice = '';
     try {
       await this.refresh();
+      if (['credentials', 'identity', 'selectProject', 'chooseCodex'].includes(action)) await this.direct.disconnect();
       if (LINKS[action]) await this.vscode.env.openExternal(this.vscode.Uri.parse(LINKS[action]));
       else if (action === 'check') await this.checkRuntime();
       else if (action === 'credentials') await this.credentials();
@@ -82,8 +99,17 @@ class SetupController {
       else if (action === 'identityGuide') await this.openDocument('docs/qq-identity.md');
       else if (action === 'clear') await this.clear();
       else if (action === 'chooseCodex') await this.chooseRuntime();
+      else if (action === 'connect') await this.direct.connect(await this.resolveCodex(this.codexOptions()));
+      else if (action === 'pair') this.direct.pair();
+      else if (action === 'cancel') await this.direct.cancel();
+      else if (action === 'showResult' && this.direct.output) {
+        const document = await this.vscode.workspace.openTextDocument({ language: 'plaintext', content: this.direct.output });
+        await this.vscode.window.showTextDocument(document, { preview: true });
+      }
     } catch (error) {
-      const allowed = ['incomplete', 'invalidProject', 'noProject', 'botRequired'];
+      const allowed = ['incomplete', 'invalidProject', 'noProject', 'botRequired', 'connectRequired', 'codexMissing',
+        'codexUnsupported', 'connectionBusy', 'qqNotConnected', 'qqDenied', 'qqNetwork', 'qqProtocol',
+        'qqEndpoint', 'qqShards', 'qqRuntime', 'configurationChanged', 'storageFailed'];
       this.notice = allowed.includes(error.message) ? this.t[error.message] : this.t.operationFailed;
       await this.vscode.window.showErrorMessage(this.notice);
     } finally {
@@ -92,15 +118,17 @@ class SetupController {
     }
   }
 
-  async checkRuntime() {
+  codexOptions() {
     const config = this.vscode.workspace.getConfiguration('codexAnyDevice');
     const installedCodex = this.vscode.extensions.getExtension('openai.chatgpt');
     const platform = { win32: 'windows', linux: 'linux', darwin: 'macos' }[process.platform];
     const arch = process.arch === 'arm64' ? 'aarch64' : 'x86_64';
     const codexFallbacks = installedCodex && platform ? [path.join(installedCodex.extensionPath,
       'bin', `${platform}-${arch}`, process.platform === 'win32' ? 'codex.exe' : 'codex')] : [];
-    this.environment = await this.check({ codexPath: config.get('codexPath', ''), codexFallbacks });
+    return { codexPath: config.get('codexPath', ''), codexFallbacks };
   }
+
+  async checkRuntime() { this.environment = await this.check(this.codexOptions()); }
 
   async credentials() {
     const state = this.store.read();
@@ -169,11 +197,12 @@ class SetupController {
   async clear() {
     const answer = await this.vscode.window.showWarningMessage(this.t.clearPrompt, { modal: true }, this.t.clearConfirm);
     if (answer !== this.t.clearConfirm) return;
+    await this.direct.clear();
     await this.store.clear();
     this.notice = this.t.settingsCleared;
   }
 
-  dispose() { this.panel?.dispose(); }
+  dispose() { this.direct.dispose(); for (const listener of this.listeners) listener.dispose(); this.panel?.dispose(); }
 }
 
 module.exports = { SetupController, ACTIONS };

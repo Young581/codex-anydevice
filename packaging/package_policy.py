@@ -11,6 +11,7 @@ FILES = (
     'package.json', 'package.nls.json', 'package.nls.zh-cn.json',
     'extension/extension.js', 'README.md', 'README.en.md', 'CHANGELOG.md',
     'extension/lib/setup-model.js', 'extension/lib/setup-controller.js',
+    'extension/lib/qq-client.js', 'extension/lib/codex-session.js', 'extension/lib/direct-controller.js',
     'extension/lib/runtime.js', 'extension/lib/strings.js', 'extension/lib/webview.js',
     'extension/assets/setup.js', 'extension/assets/setup.css',
     'LICENSE', 'PRIVACY.md', 'SECURITY.md', 'docs/research.md',

@@ -36,4 +36,6 @@ summary { color: var(--vscode-descriptionForeground); font-size: 12px; cursor: p
 .text-button:hover { background: none; text-decoration: underline; }
 footer { padding: 8px 2px; }
 #notice { margin-top: 10px; color: var(--vscode-foreground); }
+#pairingCode { padding: 12px; border-radius: 5px; background: var(--vscode-textBlockQuote-background); white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--vscode-editor-font-family); }
+#directError, #taskState { margin-top: 10px; overflow-wrap: anywhere; }
 @media (max-width: 480px) { main { padding: 22px 14px; } section { padding: 17px 14px; } h1 { font-size: 25px; } .runtime { grid-template-columns: 1fr; } .actions { flex-direction: column; align-items: stretch; } }

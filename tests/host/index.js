@@ -8,7 +8,7 @@ const path = require('node:path');
 async function run() {
   const extension = vscode.extensions.getExtension('Young581.codex-anydevice');
   assert.ok(extension, 'Extension is installed in the isolated host');
-  assert.equal(extension.packageJSON.version, '0.2.3');
+  assert.equal(extension.packageJSON.version, '0.3.0');
   assert.equal(extension.packageJSON.contributes.configuration.properties['codexAnyDevice.openclawPath'], undefined);
   if (process.env.ANYDEVICE_HOST_EXPECT_EXTENSION_PATH) {
     assert.equal(await fs.realpath(extension.extensionPath),
@@ -18,6 +18,9 @@ async function run() {
   const controller = api.controller;
   const commands = await vscode.commands.getCommands(true);
   assert.ok(commands.includes('codexAnyDevice.openSetup'));
+  for (const command of ['connectQQ', 'disconnectQQ', 'pairQQ']) assert.ok(commands.includes('codexAnyDevice.' + command));
+  assert.equal(controller.direct.status, 'disconnected');
+  assert.equal(controller.direct.snapshot().paired, false);
   await vscode.commands.executeCommand('codexAnyDevice.openSetup');
   assert.ok(controller.panel);
   const firstPanel = controller.panel;
@@ -32,14 +35,20 @@ async function run() {
   await controller.refresh();
   const model = await controller.model();
   assert.equal(model.complete, true);
+  assert.equal(model.direct.paired, false);
   assert.doesNotMatch(JSON.stringify(model), /synthetic-host-secret/);
   await controller.act('preview');
   const preview = vscode.window.activeTextEditor.document.getText();
   assert.equal(JSON.parse(preview).mode, 'direct');
-  assert.equal(JSON.parse(preview).phoneConnection, 'pendingDevelopment');
+  assert.equal(JSON.parse(preview).phoneConnection, 'requiresExplicitConnectionAndPairing');
+  assert.equal(JSON.parse(preview).plannedAuthorization.approvalLocation, 'desktop');
   assert.doesNotMatch(preview, /synthetic-host-secret/);
   await controller.openDocument('docs/setup.md');
-  assert.match(vscode.window.activeTextEditor.document.getText(), /0\.2\.3/);
+  assert.match(vscode.window.activeTextEditor.document.getText(), /0\.3\.0/);
+  controller.direct.output = 'Synthetic latest agent output';
+  await controller.act('showResult');
+  assert.equal(vscode.window.activeTextEditor.document.getText(), 'Synthetic latest agent output');
+  await controller.direct.clear();
   await controller.store.clear();
   assert.equal((await controller.model()).complete, false);
   await controller.act('identityGuide');
@@ -69,9 +78,10 @@ async function run() {
     }
   }
   await fs.writeFile(process.env.ANYDEVICE_HOST_REPORT, JSON.stringify({
-    passed: 9, checks: ['real activation', 'commands', 'one webview and CSP',
+    passed: 12, checks: ['real activation', 'commands', 'one webview and CSP',
       'SecretStorage and metadata', 'secret-free preview', 'bundled guide', 'clear state',
-      'bundled identity guide without credentials', 'synthetic API authentication summary'],
+      'bundled identity guide without credentials', 'synthetic API authentication summary',
+      'direct commands without automatic connection', 'manual metadata without verified pairing', 'explicit latest result document'],
   }, null, 2));
 }
 

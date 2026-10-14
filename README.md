@@ -1,44 +1,40 @@
 # Codex AnyDevice
 
-[English](README.en.md) · [配置向导说明](docs/setup.md) · [调研报告](docs/research.md) · [开发路线](docs/roadmap.md)
+[English](README.en.md) · [配置与使用](docs/setup.md) · [调研](docs/research.md) · [开发路线](docs/roadmap.md)
 
-计划通过手机 QQ 直接操控电脑上的 Codex，并在 VS Code 中管理项目、任务和会话交接；微信作为后续独立渠道。社区项目，非 OpenAI、腾讯或 Microsoft 官方产品。
+用手机 QQ 给电脑上的 Codex 发起新任务，在 VS Code 中选择项目、确认配对和处理审批。面向个人用户，不依赖 OpenClaw。社区项目，非 OpenAI、腾讯或 Microsoft 官方产品。
 
-**当前状态：0.2.3 个人 QQ 直连配置准备。** 可以检测 Codex、保存机器人信息、登记自己的 QQ 身份、选择一个项目并预览配置摘要。新增 [QQ 身份获取说明](docs/qq-identity.md)，手动 OpenID 录入放在高级选项；没有身份时可先保存机器人和项目，自动配对仍待接入。认证检查区分 ChatGPT 登录和 API Key；未检测到 OpenAI 认证不代表自定义服务商不可用，检测也不验证请求可用性。机器人未创建时可先完成其他准备并保存进度。已移除 OpenClaw 检测、安装提示、配置片段和专属命令；QQ 消息收发与 Codex 任务执行仍待实现，没有市场发布。
+**当前 0.3.0 为 QQ 官方 WebSocket 直连原型。** 已实现连接、短时配对码、电脑确认、`/new`、`/status`、`/cancel`、结果回传和电脑审批。合成测试与真实账号验收分别记录；机器人 WebSocket/私聊权限、手机实际收发、ChatGPT/API 真实任务仍需验收。没有 Marketplace 或正式 Release 发布。
 
-用户优先级：两种用法都需要，先打通手机发起新任务，再支持已有会话续聊、提问和审批。
+## 开始使用
 
-## 推荐方向
+1. 安装本地 VSIX，重载 VS Code，打开受信任的本地项目，点击状态栏 **Codex AnyDevice**。
+2. 保存 QQ 官方机器人 AppID/AppSecret，选择一个项目，检查 Codex。已保存的 0.2.x 配置继续使用。
+3. 点击 **连接 QQ**，在电脑授权这个项目。看到 **QQ 已连接** 后点击 **开始配对**。
+4. 用本人 QQ 私聊机器人发送页面上的 `/pair 一次性代码`，在电脑确认。插件自动取得 OpenID，无需填写 QQ 号码。
+5. 发送 `/new 读取 README，概括项目用途，不修改文件`。用 `/status` 查询状态、`/cancel` 取消；需要审批时在电脑逐条确认。
 
-采用 **QQ 官方机器人 → AnyDevice 扩展 → 本机 Codex app-server**，面向一个用户和一个项目。扩展负责腾讯接口鉴权、连接恢复、身份与项目授权、消息去重和结果回传；用户使用流程不依赖 OpenClaw。
+电脑和 VS Code 必须保持运行。首次验收用不含秘密的合成项目。重启或主动断开后需重新配对，不自动重放任务。配置资料齐全不代表已连接，手工登记 OpenID 也不自动授权。
 
-QQ 优先验证官方 WebSocket 长连接，具体接入权限以机器人后台和真实账号为准；Webhook 需要 HTTPS 回调地址。扩展直连时电脑和 VS Code 需保持运行。微信和已有 VS Code 会话交接分别验证；原生新任务不等于接管运行中的桌面会话。完整依据与边界见[调研报告](docs/research.md)和[直连原型步骤](docs/qq-direct-poc.md)。
+## 兼容范围
 
-## 开发
+采用 **QQ 官方机器人 → AnyDevice → 本机 Codex app-server**，无公网回调，仅支持单机器人、单发信人、单项目的私聊文字任务。账号权限以腾讯后台及实际连接结果为准；Webhook、多分片、群聊、微信与已有会话续聊未实现。
 
-开发需要 Node 22+、Python 3.8+、VS Code 1.96+。扩展没有 npm 运行时或开发依赖；用户需要本机可用的 Codex。Codex 原生程序可从已安装的 OpenAI 扩展发现，npm 入口按其自身要求使用 Node。
+当前核对的 Codex 为 **0.162.0-alpha.17.2**，其他版本会被拒绝启动。任务继承所选 CLI 的 ChatGPT/API Key、自定义服务商、模型与常规配置；插件不读取或改写登录/模型配置文件。API 任务可能计费。使用原生用户请求审批，不使用自动审批。若 Windows 原生运行时返回只读沙箱，任务保留限制并提示；项目写入需先在官方 Codex 完成沙箱设置。选定目录不是完整读取边界，越界请求应逐条审查。
+
+结果仅在内存中保留最新一次的最多 20,000 字符，QQ 回传摘要；按保守 5 分钟窗口及单条源消息最多 4 次回复处理。长任务可能无法主动回传，请发 `/status` 或在电脑查看结果。完整边界见[架构](docs/architecture.md)和[隐私](PRIVACY.md)。
+
+## 开发与维护
+
+需要 Node 22+、Python 3.8+；QQ 直连需要具有原生 fetch/WebSocket 的近期 VS Code 扩展宿主，本轮宿主为 1.141.0。没有 npm 依赖。
 
 ```text
 node scripts/check.js
-node --test tests/extension.test.js tests/setup.test.js tests/runtime.test.js
+node --test tests/extension.test.js tests/setup.test.js tests/runtime.test.js tests/direct.test.js
 python -B tests/package_validation.py
 python -B build.py --output dist
 ```
 
-在 VS Code 中按 F5 启动 Extension Development Host，点击状态栏 **Codex AnyDevice** 或运行 **打开个人 QQ 配置向导**。向导支持中英文、深浅主题和窄窗口。密钥通过密码框输入并保存到 SecretStorage；网页和配置摘要不包含明文密钥。0.2.0 已保存的机器人、身份和项目资料继续可用。
+治理与发布沿用 [Codex Beacon](https://github.com/Young581/codex-beacon)：公开 MIT 仓库、`main`、双语说明、问题模板、Windows/Linux/macOS CI、只读 Actions、明确打包清单和 SHA-256 复核。本地离线包与官方 vsce 包分别审计，见[发布说明](docs/releases.md)、[维护方案](docs/maintenance.md)与[验证记录](docs/verification.md)。
 
-`dist/` 是开发用离线 VSIX；首次正式发布须使用官方 `@vscode/vsce`，审计同一份包并完成隔离宿主验收，见[发布流程](docs/releases.md)。
-
-## 仓库约定
-
-基础设置沿用 [Codex Beacon](https://github.com/Young581/codex-beacon)：公开仓库、MIT、`main`、中英文说明、问题模板、Windows/Linux/macOS CI、只读 Actions 权限、明确打包清单和 SHA-256 复核。实际设置及尚未验证的功能分别记录在[维护方案](docs/maintenance.md)与[验证记录](docs/verification.md)。
-
-| 目录 | 内容 |
-| --- | --- |
-| `extension/` | VS Code 扩展入口 |
-| `docs/` | 调研、架构、原型步骤、路线与维护说明 |
-| `scripts/` | 本地检查、GitHub 配置工具 |
-| `packaging/` | 发布文件白名单和审计 |
-| `tests/` | 合成扩展与打包检查 |
-
-[贡献说明](CONTRIBUTING.md) · [隐私](PRIVACY.md) · [安全报告](SECURITY.md) · [变更记录](CHANGELOG.md)
+[贡献](CONTRIBUTING.md) · [安全报告](SECURITY.md) · [变更记录](CHANGELOG.md)

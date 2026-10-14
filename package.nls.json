@@ -3,5 +3,8 @@
   "command.checkEnvironment": "Check Codex environment",
   "config.codexPath": "Absolute path to Codex. Leave empty to discover PATH or the installed Codex extension.",
   "command.openResearch": "Open research and development plan",
-  "command.showStatus": "Show development status"
+  "command.showStatus": "Show development status",
+  "command.connectQQ": "Connect official QQ bot",
+  "command.disconnectQQ": "Disconnect QQ bot",
+  "command.pairQQ": "Pair my QQ"
 }

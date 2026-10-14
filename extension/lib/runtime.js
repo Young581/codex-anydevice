@@ -92,20 +92,23 @@ function version(result) {
 
 async function checkEnvironment(options = {}) {
   const runner = options.run || run;
-  const codexFile = findExecutable('codex', { ...options, configured: options.codexPath,
-    fallbacks: options.codexFallbacks });
-  const codex = invocation(codexFile, options) || (!options.codexPath
-    ? (options.codexFallbacks || []).map((file) => (options.exists || isFile)(file)
-      ? invocation(file, options) : undefined).find(Boolean) : undefined);
+  const codex = resolveCodex(options);
   const [codexVersion, login] = await Promise.all([
     runner(codex, ['--version']), runner(codex, ['login', 'status']),
   ]);
-  // Only bounded versions and states leave this module; raw CLI output never reaches the UI.
   return {
     checked: true,
     codex: { found: Boolean(codex), version: version(codexVersion), login: parseLogin(login),
-      detectedShim: Boolean(codexFile && !codex) },
+      detectedShim: Boolean(!codex && findExecutable('codex', { ...options, configured: options.codexPath })) },
   };
 }
 
-module.exports = { findExecutable, invocation, run, parseLogin, checkEnvironment };
+function resolveCodex(options = {}) {
+  const codexFile = findExecutable('codex', { ...options, configured: options.codexPath,
+    fallbacks: options.codexFallbacks });
+  return invocation(codexFile, options) || (!options.codexPath
+    ? (options.codexFallbacks || []).map((file) => (options.exists || isFile)(file)
+      ? invocation(file, options) : undefined).find(Boolean) : undefined);
+}
+
+module.exports = { findExecutable, invocation, run, parseLogin, checkEnvironment, resolveCodex, version };

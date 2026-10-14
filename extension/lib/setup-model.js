@@ -48,10 +48,10 @@ function setupSummary(state) {
     channel: 'qq',
     mode: 'direct',
     bot: { appId: state.appId, credentialsStored: true },
-    plannedAuthorization: { allowedSenderId: state.senderId, approvalSenderId: state.senderId,
-      groups: 'disabled' },
+    plannedAuthorization: { allowedSenderId: state.senderId, approvalLocation: 'desktop',
+      groups: 'disabled', requiresLivePairing: true },
     project: { ...state.project },
-    phoneConnection: 'pendingDevelopment',
+    phoneConnection: 'requiresExplicitConnectionAndPairing',
   };
 }
 

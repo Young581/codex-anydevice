@@ -30,6 +30,15 @@ function render(webview, extensionUri, vscode) {
     <div class="project"><strong id="projectName"></strong><p id="projectPath" class="small"></p></div>
     <button data-action="selectProject" id="selectProject"></button>
   </section>
+  <section><div class="heading"><span class="number">4</span><div><h2 id="directTitle"></h2><p id="directBody"></p></div></div>
+    <div class="facts" aria-live="polite"><span id="connectionState"></span><span id="pairState"></span></div>
+    <div class="actions"><button data-action="connect" id="connect"></button><button data-action="pair" id="pair"></button><button data-action="disconnect" id="disconnect" class="secondary"></button></div>
+    <div id="pairBox" hidden><p id="pairInstruction" class="small"></p><pre id="pairingCode"></pre></div>
+    <p id="phoneCommands" class="small"></p><p id="taskState" role="status"></p>
+    <p id="directError" role="status"></p><p id="deliveryState" class="small"></p>
+    <p id="sandboxState" class="small"></p>
+    <div class="actions"><button data-action="cancel" id="cancel" class="secondary"></button><button data-action="showResult" id="showResult" class="secondary"></button></div>
+  </section>
   <section><h2 id="finishTitle"></h2><p id="finishBody"></p>
     <div class="actions"><button data-action="preview" id="preview" class="secondary"></button><button data-action="guide" id="guide" class="secondary"></button></div>
   </section>

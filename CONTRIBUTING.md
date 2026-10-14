@@ -10,7 +10,7 @@ Use synthetic fixtures and redact diagnostics. Never commit credentials, user se
 
 ```text
 node scripts/check.js
-node --test tests/extension.test.js tests/setup.test.js tests/runtime.test.js
+node --test tests/extension.test.js tests/setup.test.js tests/runtime.test.js tests/direct.test.js
 python -B tests/package_validation.py
 python -B build.py --output dist
 ```

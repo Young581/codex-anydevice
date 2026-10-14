@@ -1,37 +1,28 @@
-# 个人 QQ 直连原型
+# QQ 官方直连原型与证据
 
-目标：手机 QQ → QQ 官方机器人 → AnyDevice 本地扩展 → Codex app-server，先完成一个明确身份和一个项目的新任务。以下为待实现、待验收步骤；0.2.3 仅完成配置准备。
+0.3.0 实现 **QQ 官方 WebSocket → AnyDevice → 本机 Codex app-server**，无需 OpenClaw 或公网回调。真实账号权限、手机与模型执行待验收。
 
-## 连接准备
+## 2026-10-14 核对
 
-1. 在 QQ 开放平台创建机器人，记录开放平台允许的事件、接入方式、消息配额和测试身份。QQ 文档列出 WebSocket/Webhook，但不能以文档存在推断新账号已有对应权限。
-2. 优先验证官方 WebSocket 长连接：请求 Access Token 和 WSS 接入点，完成 Hello、Identify、Heartbeat/ACK、Resume 与令牌刷新。对断连、无 ACK、失效 Session 和网络错误使用有界重试，保留准确事件序号。
-3. 若账号只开放 Webhook，先记录实际准入和 HTTPS 回调要求，再评估个人使用成本。当前路线不依赖 OpenClaw，也未部署公网中转服务。
-4. AppSecret 使用现有 VS Code SecretStorage，在连接时读取；短期 Access Token 只留在运行内存。不把凭据放入网页、剪贴板、配置摘要或诊断输出。
+实际获取官方[鉴权](https://bot.q.qq.com/wiki/develop/api-v2/dev-prepare/interface-framework/api-use.html)、[连接与事件](https://bot.q.qq.com/wiki/develop/api-v2/dev-prepare/interface-framework/event-emit.html)、[C2C](https://bot.q.qq.com/wiki/develop/api-v2/autogen/event/c2c_message_create.html)与[发送私聊](https://bot.q.qq.com/wiki/develop/api-v2/autogen/api/v2_users_user_openid_messages.post.html)。使用 api.bot.qq.com token、QQBot、gateway/bot、文档的 WSS、1 << 25、外层 d.author.user_openid 和 v2/users/{openid}/messages。回复文档同时出现 60 分钟/5 分钟，本版保守取 5 分钟及最多 4 次。
 
-## 身份与项目
+实际获取 [OpenAI App Server Markdown](https://learn.chatgpt.com/docs/app-server.md)，以安装的 **0.162.0-alpha.17.2** 在隔离 CODEX_HOME 生成 JSON Schema，核对初始化与新线程返回；不调用模型。
 
-直连配对计划采用本机主动开启的短时配对窗口、一次性代码、尝试次数限制和电脑确认。未授权时只处理配对事件，不能启动任务。最终允许身份使用 QQ 官方 `C2C_MESSAGE_CREATE` 事件外层发信人的 `author.user_openid`；不能从引用消息内的发信人、群成员或跨应用身份授权。更换 AppID 会清除旧身份。配对实现之前，向导的高级选项允许在保存机器人资料后人工登记明确 OpenID，但不会连接或执行；个人用户可先跳过，见[获取说明](qq-identity.md)。
+| 项目 | 精确证据 |
+| --- | --- |
+| thread/start | sandbox 的 wire 字符串为 workspace-write，返回类型为 camelCase |
+| 审批 | Schema 有 untrusted，但运行时拒绝配置 approval_policy = untrusted，提示不再支持；本版使用 on-request/user |
+| turn/start | 使用 workspaceWrite 或原生更严格的 readOnly，工具网络关闭 |
+| Windows 返回 | 隔离环境请求 workspace-write 后返回 readOnly；只确认行为，未确定具体原因，也未调用系统 setup |
+| 审批请求 | commandExecution/fileChange requestApproval，准确 accept/decline；resolved 作废旧弹窗 |
+| 取消 | turn/interrupt 精确 thread/turn，turn/completed 提供最终状态 |
 
-默认只处理一个已授权发信人的私聊，禁用群聊。项目从本机向导选择并在执行前重新检查真实目录；手机使用登记的项目别名，不接受任意路径。选定工作目录不是 Codex 文件沙箱。
+网页示例与 alpha 版本字符串不同，不直接复制另一版本的 unlessTrusted/workspaceWrite 到 thread/start。新增版本先生成 schema、做隔离策略与审批验收，再更新支持矩阵。
 
-## Codex 新任务
-
-使用自己的本机 stdio app-server 连接。锁定 Codex 版本，并用该版本的协议模式核对 `initialize`、`initialized`、`thread/start`、`turn/start`、事件回传和 `turn/interrupt`。首个任务创建独立新线程；不与其他 app-server 并发写同一线程。
-
-认证兼容 ChatGPT 登录和 API Key；自定义服务商依赖所选 CLI 自己的认证、模型与配置。AnyDevice 不复制模型密钥到 QQ 或重新保存 Codex 登录文件。`login status` 只作为状态提示，不能单独决定服务商可用性；在专门的新任务验收中记录实际认证方式、模型、服务商与计费边界，普通 CI 不发起付费请求。
-
-首批指令只覆盖新任务、状态和取消；状态回传区分已接收、运行中、等待提问/审批、完成、失败、取消和未确认。消息去重同时检查 QQ 事件/消息 ID 和本地操作 ID，重启后的不确定执行先查询，不重放文件修改。
-
-审批使用原生 request ID、thread/turn、指定审批人和到期时间，明确允许/拒绝，超时不能批准。运行时诊断不保留完整提示词、结果正文、密钥或真实身份。结果发送遵守官方回复时限、频率和长度约束，失败应向桌面报告。
+原生权限降低时保留限制。官方 app-server 文档列出 windowsSandbox/setupStart，本版不调用系统设置接口；用户需通过官方 Codex 设置。单独 Windows 使用页面本轮网络超时，不作为已读取证据。
 
 ## 验收
 
-- 合成账号/事件：非法身份、群聊、重复消息、跨项目、过期配对和过期审批被拒绝。
-- 合成 Codex 传输：初始化、流式结果、失败、取消、断连、重启与单线程写入。
-- 真实隔离宿主：配置继续保存，关闭窗口/重载明确停止接收，正在执行的任务记录取消或未知状态。
-- 用户创建机器人后真机：自己的 QQ 私聊发起一个合成项目任务，核对实际文件变化、原生 thread/turn ID、进度和结果回传。
+按[使用说明](setup.md)在无秘密项目连接、配对，用 `/new` 读取 README，再验收一个写文件任务。分别记录 ChatGPT 和 API Key 的实际请求，自定义服务商另行核验。检查本人/非法身份、群聊、重复消息、过期配对、电脑拒绝、取消、断网恢复、重载未知状态、过期/已解决审批与多窗口占用。
 
-## 官方依据
-
-2026-10-13 已读取：[QQ 启动接入](https://bot.q.qq.com/wiki/develop/api-v2/)、[事件与连接维护](https://bot.q.qq.com/wiki/develop/api-v2/dev-prepare/interface-framework/event-emit.html)、[OpenAI Codex App Server](https://learn.chatgpt.com/docs/app-server)。官方文档能力与本项目验收结果分别记录。
+不自动批准、模拟点击或移除认证来通过测试。合成和宿主结果见[验证记录](verification.md)，普通 CI 不访问真实 QQ 或付费模型。
