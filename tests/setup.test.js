@@ -119,7 +119,7 @@ test('CLI authentication status does not prevent saving or reviewing setup detai
     await f.controller.act('preview');
     assert.equal(f.controller.notice, '');
   }
-  assert.equal(f.calls.filter((call) => call[0] === 'open').length, 4);
+  assert.equal(f.calls.filter((call) => call[0] === 'open').length, 8);
 });
 
 test('unknown actions and revoked workspace trust cannot mutate setup', async (t) => {
@@ -143,4 +143,145 @@ test('concurrent check is not started twice', async (t) => {
   await f.controller.act('check'); assert.equal(count, 1); finish({ checked: true }); await first;
 });
 
+test('cancelling remains available while another setup operation is waiting', async t => {
+  const f = fixture(t); let finish;
+  f.controller.check = () => new Promise(resolve => { finish = resolve; });
+  const waiting = f.controller.act('check'); await new Promise(resolve => setImmediate(resolve));
+  let cancelled = 0; f.controller.direct.cancel = async () => { cancelled++; };
+  await f.controller.act('cancel'); assert.equal(cancelled, 1); assert.equal(f.controller.busy, true);
+  finish({ checked: true }); await waiting; assert.equal(f.controller.busy, false);
+});
+
 test('both languages cover the same interface strings', () => { assert.deepEqual(Object.keys(zh).sort(), Object.keys(en).sort()); });
+
+test('remembered identity and conversation are scoped to bot and explicitly authorized project', async t => {
+  const f = fixture(t), store = f.controller.store;
+  const id = '11111111-1111-1111-1111-111111111111';
+  await store.saveBot(appId, secret); await store.saveProject(f.project); await store.saveSender(senderId);
+  assert.equal(setupSummary(store.read()).plannedAuthorization.requiresLivePairing, true);
+  await assert.rejects(store.saveConversation(id), /threadMissing/);
+  await store.confirmSender(senderId); await store.saveConversation(id);
+  const restored = new SetupStore(f.context);
+  assert.equal(restored.read().conversationId, id);
+  assert.equal(setupSummary(restored.read()).plannedAuthorization.requiresLivePairing, false);
+  await store.saveProject({ name: 'different', path: path.join(f.project.path, 'different') });
+  assert.equal(store.read().confirmedSender, senderId);
+  assert.equal(store.read().authorizedProject, undefined); assert.equal(store.read().conversationId, undefined);
+  await store.authorizeProject(); await store.saveConversation(id);
+  await store.saveSender(senderId); assert.equal(store.read().confirmedSender, undefined);
+  await store.confirmSender(senderId); await store.saveConversation(id);
+  await store.saveBot('987654321', secret);
+  assert.equal(store.read().senderId, undefined); assert.equal(store.read().conversationId, undefined);
+});
+
+test('forgetting pairing is durable and invalidated queued grants cannot restore it', async t => {
+  const f = fixture(t), store = f.controller.store;
+  await store.saveBot(appId, secret); await store.saveProject(f.project); await store.confirmSender(senderId);
+  let valid = true;
+  const save = store.saveBot(appId, secret);
+  const late = store.confirmSender(senderId, () => valid); valid = false;
+  const forget = store.forgetPairing();
+  await save; await assert.rejects(late, /configurationChanged/); await forget;
+  assert.equal(new SetupStore(f.context).read().confirmedSender, undefined);
+  assert.equal(store.read().senderId, senderId);
+});
+
+test('saved legacy OpenID requires explicit desktop confirmation with no QQ code', async t => {
+  const f = fixture(t), store = f.controller.store;
+  await store.saveBot(appId, secret); await store.saveProject(f.project); await store.saveSender(senderId);
+  await f.controller.act('trustIdentity'); assert.equal(store.read().confirmedSender, undefined);
+  let shown;
+  f.api.window.showWarningMessage = async (message, options) => { shown = { message, options }; return zh.pairAllow; };
+  await f.controller.act('trustIdentity');
+  assert.ok(shown.options.modal); assert.ok(shown.options.detail.includes(senderId));
+  assert.ok(shown.options.detail.includes(f.project.path));
+  assert.equal(store.read().confirmedSender, senderId); assert.equal(store.read().authorizedProject, f.project.path);
+  assert.equal(f.controller.direct.snapshot().pairingCode, undefined);
+});
+
+test('late legacy identity confirmation cannot override disconnect or a changed scope', async t => {
+  for (const change of ['disconnect', 'identity', 'project', 'trust']) {
+    const f = fixture(t), store = f.controller.store;
+    await store.saveBot(appId, secret); await store.saveProject(f.project); await store.saveSender(senderId);
+    let approve, entered;
+    const ready = new Promise(resolve => { entered = resolve; });
+    f.api.window.showWarningMessage = () => { entered(); return new Promise(resolve => { approve = resolve; }); };
+    const pending = f.controller.act('trustIdentity'); await ready;
+    if (change === 'disconnect') await f.controller.act('disconnect');
+    if (change === 'identity') await store.saveSender('other_synthetic_sender');
+    if (change === 'project') await store.saveProject({ name: 'changed', path: path.dirname(f.project.path) });
+    if (change === 'trust') f.api.workspace.isTrusted = false;
+    approve(zh.pairAllow); await pending;
+    assert.equal(store.read().confirmedSender, undefined, change);
+  }
+});
+
+test('a second disconnect during legacy grant cleanup invalidates the confirmation', async t => {
+  const f = fixture(t), store = f.controller.store;
+  await store.saveBot(appId, secret); await store.saveProject(f.project); await store.saveSender(senderId);
+  f.warnings.push(zh.pairAllow);
+  let release, entered;
+  const ready = new Promise(resolve => { entered = resolve; });
+  f.controller.direct.release = () => { entered(); return new Promise(resolve => { release = resolve; }); };
+  const pending = f.controller.act('trustIdentity'); await ready;
+  await f.controller.act('disconnect'); release(); await pending;
+  assert.equal(store.read().confirmedSender, undefined);
+});
+
+test('legacy project grants migrate and multiple directories retain separate targets and revocations', async t => {
+  const f = fixture(t), store = f.controller.store;
+  const targetA = '11111111-1111-4111-8111-111111111111', targetB = '22222222-2222-4222-8222-222222222222';
+  f.data.set(STATE_KEY, { appId, senderId, project: f.project, confirmedSender: senderId, confirmedAppId: appId,
+    authorizedProject: f.project.path, conversationId: targetA });
+  assert.equal(store.read().projects[0].conversationId, targetA);
+  const other = { name: 'Other synthetic project', path: path.join(f.project.path, 'other') };
+  await store.saveProject(other); assert.equal(store.read().authorizedProject, undefined);
+  await assert.rejects(store.switchProject(other.path), /projectUnauthorized/);
+  await store.authorizeProject(); await store.saveConversation(targetB);
+  await store.switchProject(f.project.path); assert.equal(store.read().conversationId, targetA);
+  await store.switchProject(other.path); assert.equal(store.read().conversationId, targetB);
+  await store.removeProject(other.path); assert.equal(store.read().project.path, f.project.path);
+  assert.equal(store.read().projects.length, 1); assert.equal(store.read().conversationId, targetA);
+  await store.forgetPairing(); assert.ok(store.read().projects.every(project => !project.authorized && !project.conversationId));
+  await assert.rejects(store.switchProject(f.project.path), /projectUnauthorized/);
+});
+
+test('changing bot or manual identity revokes every project grant and target', async t => {
+  for (const change of ['bot', 'identity']) {
+    const f = fixture(t), store = f.controller.store;
+    await store.saveBot(appId, secret); await store.saveProject(f.project); await store.confirmSender(senderId);
+    await store.saveProject({ name: 'second', path: path.join(f.project.path, 'second') }); await store.authorizeProject();
+    if (change === 'bot') await store.saveBot('987654321', secret); else await store.saveSender(senderId);
+    assert.ok(store.read().projects.every(project => !project.authorized && !project.conversationId));
+    assert.equal(store.read().confirmedSender, undefined);
+  }
+});
+
+test('desktop can browse an external local directory and authorization requires an exact confirmation', async t => {
+  const f = fixture(t), store = f.controller.store;
+  await store.saveBot(appId, secret);
+  f.picks.push({ browse: true });
+  f.api.window.showOpenDialog = async options => {
+    assert.equal(options.canSelectFolders, true); assert.equal(options.canSelectFiles, false);
+    return [{ scheme: 'file', fsPath: f.project.path }];
+  };
+  await f.controller.act('selectProject'); assert.equal(store.read().project.path, f.project.path);
+  assert.equal(store.read().authorizedProject, undefined);
+  await store.confirmSender(senderId);
+  const other = { name: 'another', path: path.dirname(f.project.path) };
+  await store.saveProject(other);
+  await f.controller.act('authorizeProject'); assert.equal(store.read().authorizedProject, undefined);
+  f.warnings.push(zh.connectAllow); await f.controller.act('authorizeProject');
+  assert.equal(store.read().authorizedProject, other.path);
+});
+
+test('desktop project selection clears old results and thread links and caps saved folders', async t => {
+  const f = fixture(t), store = f.controller.store;
+  await store.saveProject({ name: 'old project', path: path.dirname(f.project.path) });
+  f.controller.direct.output = 'Old project output'; f.controller.direct.latestThread = '11111111-1111-4111-8111-111111111111';
+  f.picks.push({ project: f.project }); await f.controller.act('selectProject');
+  assert.equal(f.controller.direct.output, ''); assert.equal(f.controller.direct.latestThread, undefined);
+  for (let index = store.read().projects.length; index < 20; index++) await store.saveProject({ name: 'synthetic-' + index, path: path.join(f.project.path, String(index)) });
+  await assert.rejects(store.saveProject({ name: 'overflow', path: path.join(f.project.path, 'overflow') }), /projectLimit/);
+  assert.equal(store.read().projects.length, 20);
+});

@@ -1,5 +1,57 @@
 # Changelog
 
+## 0.6.2 — 2026-10-15
+
+- 首次正式 GitHub Release，汇总已完成的官方同步稳定性修复、记住 QQ 配对、原线程续聊、多项目切换、对话历史分页和精简管理面板。
+- 每轮完成的修改提交并推送；main 三平台 CI 通过后自动创建版本 tag，并使用固定官方 `@vscode/vsce` 4.0.0 打包、审计和上传 Release 草稿。下载同包完成隔离宿主验证后公开发布，不覆盖旧 tag 或资产。
+- 发布脚本核对精确提交、版本、源码载荷、上传/下载 SHA-256 与已审查哈希。GitHub Release 与 Marketplace 上架分别记录。
+
+First public GitHub release, with persistent pairing, same-thread continuation, project switching, paged history and a simpler management panel. Completed changes now follow a committed push, version tag and audited release workflow.
+
+## 0.6.1 — 2026-10-15
+
+- 管理面板移除高级选项、环境认证摘要、手工身份登记、配置预览和开发原理说明；排障工具与清除配置移到命令面板。
+- 保留项目授权、持久 QQ 配对、官方同步与恢复、续聊选择、历史分页、任务取消和结果查看。QQ 指令填入按钮保留为日常操作入口。
+- 会话与当前任务分组显示，中英文文案改为使用说明；环境检查结果改为单独文档。
+
+Simplified the management panel for everyday use. Troubleshooting moves to the command palette; pairing, projects, history, continuation and task controls remain available.
+
+## 0.6.0 — 2026-10-15
+
+- 增加最多 20 个本地项目目录，可浏览工作区之外的目录；逐目录电脑确认授权、移除和撤销，旧单项目配置保留。QQ `/projects`、`/project 编号` 切换已授权目录，无需重新配对，一次仍只运行一个任务。
+- 各项目分别记住续聊目标，切换清除旧项目临时结果与列表，忘记配对、更换机器人或手工身份会撤销所有项目授权。
+- 增加 `/sessions next`、`/history [编号]`、`/history next` 和电脑历史查看/翻页；按项目重新核对后经原生接口读取，只传用户/Codex 文字，每页最多 1400 字符，不恢复线程或发起模型请求。
+- `/help`、`/` 和命令前缀返回匹配指令；可选 QQ Markdown 指令填入按钮限定发信人且 `enter:false`。自定义按钮需 QQ 权限，默认关闭；明确 HTTP 400/403 拒绝后回退文字，不重试不确定的发送。插件不接管 QQ 输入过程中的实时联想。
+- 扩展合成测试、原生历史/项目隔离与最终包宿主验收；真实手机、QQ 按钮权限与真实模型仍单独验收。
+
+Added authorized project switching, paged dialogue history and QQ command hints with optional input-only buttons. Pairing, exact approvals and native sandbox restrictions remain enforced.
+
+## 0.5.1 — 2026-10-15
+
+- 修复快速断开/重连时旧 QQ 连接失败误停新连接；已记住配对的离线页面和状态提示改为连接恢复。
+- 独立 Codex 与手机共享通道复用逐记录 JSONL 解析，多个合法消息合并到达时不再误判超限，保留手机单条 1 MiB 上限。
+- 环境检查等操作等待期间仍可取消正在运行的任务。
+- 官方面板尚未挂载时重试公开会话导航，仍要求准确线程的后端加入证据；已有缓存线程以此前成功读取的证据判断，不放宽模型提交前的加载确认。
+- 扩展隔离官方 GUI 回归，覆盖手机新任务、电脑同线程续聊、手机返回原线程、取消和恢复；真实 QQ 与真实模型验收仍单独记录。
+
+Fixed reconnect races, per-record parsing, cancellation during setup work and official-panel readiness. Pairing and same-thread continuation remain available; actual phone and real model acceptance are tracked separately.
+
+## 0.5.0 — 2026-10-15
+
+- 新增 `/sessions`、`/use 编号` 与 `/continue 内容`，以及电脑选择续聊目标；限定授权项目的最近 10 条会话，在空闲原线程继续，保留上下文，不 fork、不接管运行中任务。
+- QQ 首次配对并经电脑确认后，记住 AppID、OpenID 和项目授权，断开/重启无需再发配对码；旧版保存的身份可在电脑一次确认迁移，无需重复 QQ 配对。提供取消记住配对，更换项目需电脑重新授权。
+- 保存最近创建或选择的续聊线程；更换机器人、手工修改身份或清除授权时移除目标，迟到确认不能恢复撤销的授权。
+- 共享代理预留线程、检查运行中与提交中的桌面任务，保留准确审批路由、on-request/user 与原生只读策略；更新同步入口可刷新载荷并保留原设置备份。
+- 增加隔离原生后端续聊/上下文/取消/桌面恢复/错误令牌验证；真实 QQ、真实模型与本轮官方 GUI 验收另列。
+
+Added same-thread continuation and persistent QQ pairing, with explicit desktop migration for existing OpenID metadata. Native isolated validation uses an authenticated local model fixture; real phone/model and GUI acceptance remain separate.
+
+## 0.4.1 — 2026-10-14
+
+- 修复启用官方同步后打开较长桌面会话时代理退出、官方 Codex 显示启动失败的问题：桌面 stdio 单条 JSONL 上限由 1 MiB 提升为 256 MiB，手机通道限制保持不变。
+- 消息大小按单条记录计算，多个合法消息合并到同一个数据块时不再误判超限；分片 UTF-8 按字节计数，协议失败后停止处理。
+- 增加大历史转发及后续请求存活、合并记录、分片字节边界和手机上限回归检查；旧版已启用同步需先恢复入口，更新后重新启用以刷新生成代理。
+
 ## 0.4.0 — 2026-10-14
 
 - 新增 Windows 官方 Codex 面板同步：手机任务运行时显示进度，完成后可在同一线程继续聊。锁定官方扩展 26.51007.21434 / CLI 0.162.0-alpha.17.2。

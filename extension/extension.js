@@ -27,13 +27,16 @@ function activate(context) {
     vscode.commands.registerCommand('codexAnyDevice.showStatus', async () => {
       const model = await controller.model();
       return vscode.window.showInformationMessage(model.direct.status === 'disconnected'
-        ? `${t.disconnected} · ${t.needsPairing}`
+        ? `${t.disconnected} · ${model.direct.remembered ? t.reconnectRemembered : t.needsPairing}`
         : `${t[model.direct.status]} · ${model.direct.paired ? t.paired : t.identityMissing}`);
     }),
     ...['connect', 'disconnect', 'pair'].map(action => vscode.commands.registerCommand(
       'codexAnyDevice.' + { connect: 'connectQQ', disconnect: 'disconnectQQ', pair: 'pairQQ' }[action], async () => {
         await controller.open(); await controller.act(action);
-      }))
+      })),
+    ...Object.entries({ openGuide: 'guide', chooseCodex: 'chooseCodex', registerQQIdentity: 'identity',
+      previewConfiguration: 'preview', clearConfiguration: 'clear' }).map(([command, action]) =>
+      vscode.commands.registerCommand('codexAnyDevice.' + command, () => controller.act(action)))
   );
   return { controller };
 }

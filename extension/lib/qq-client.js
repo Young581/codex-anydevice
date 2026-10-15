@@ -9,6 +9,16 @@ const TOKEN_URL = API + '/app/getAppAccessToken';
 // Keep REST/token traffic on API; never trust arbitrary QQ subdomains for Identify.
 const GATEWAY_HOSTS = new Set(['api.bot.qq.com', 'api.sgroup.qq.com']);
 const MAX_BODY = 256 * 1024;
+const COMMANDS = ['/new ', '/continue ', '/sessions', '/use ', '/history', '/projects', '/project ', '/status', '/cancel', '/help', '/sessions next', '/history next'];
+function suggestCommands(prefix) { return COMMANDS.filter(command => command.trim().startsWith(prefix.trim().toLowerCase())).slice(0, 10); }
+function commandKeyboard(commands, sender) {
+  const buttons = commands.filter(command => COMMANDS.includes(command)).slice(0, 10).map((command, index) => ({
+    id: String(index), render_data: { label: command.trim(), visited_label: command.trim(), style: 1 },
+    action: { type: 2, permission: { type: 0, specify_user_ids: [sender] }, data: command, enter: false,
+      unsupport_tips: command.trim() },
+  }));
+  return { content: { rows: Array.from({ length: Math.ceil(buttons.length / 2) }, (_, index) => ({ buttons: buttons.slice(index * 2, index * 2 + 2) })) } };
+}
 
 class QqClient extends EventEmitter {
   constructor(options = {}) {
@@ -27,7 +37,10 @@ class QqClient extends EventEmitter {
     // Credentials never follow redirects or leave the official origin.
     if (!url.startsWith(API + '/')) throw new Error('qqEndpoint');
     const response = await this.fetch(url, { ...options, redirect: 'error', signal: AbortSignal.timeout(12000) });
-    if (!response.ok) throw new Error(response.status === 401 || response.status === 403 ? 'qqDenied' : 'qqNetwork');
+    if (!response.ok) {
+      const error = new Error(response.status === 401 || response.status === 403 ? 'qqDenied' : 'qqNetwork');
+      error.httpStatus = response.status; throw error;
+    }
     const length = Number(response.headers?.get('content-length'));
     if (length > MAX_BODY) throw new Error('qqProtocol');
     const reader = response.body?.getReader(); let body = '';
@@ -61,9 +74,9 @@ class QqClient extends EventEmitter {
 
   async start(appId, secret) {
     if (!validAppId(appId) || !validSecret(secret) || !this.WebSocket || !this.fetch) throw new Error('qqRuntime');
-    this.stop(); this.stopped = false; this.appId = appId; this.secret = secret;
+    this.stop(); this.stopped = false; this.appId = appId; this.secret = secret; this.buttonsUnavailable = false;
     const epoch = this.epoch;
-    try { await this.connect(epoch); } catch (error) { this.stop(); throw error; }
+    try { await this.connect(epoch); } catch (error) { if (epoch === this.epoch) this.stop(); throw error; }
   }
 
   async connect(epoch) {
@@ -158,7 +171,7 @@ class QqClient extends EventEmitter {
     }), Math.min(30000, 1000 * 2 ** (this.retries - 1)));
   }
 
-  async reply(message, text) {
+  async reply(message, text, commands) {
     const epoch = this.epoch;
     if (this.stopped || !validSender(message.sender) || typeof message.id !== 'string' || !message.id
       || !Number.isSafeInteger(message.at) || message.at > this.now() + 60000
@@ -171,10 +184,18 @@ class QqClient extends EventEmitter {
     this.replySequences.set(key, { sequence, at: message.at });
     await this.authenticate(epoch);
     if (this.stopped || epoch !== this.epoch) throw new Error('qqStopped');
-    const result = await this.json(API + '/v2/users/' + encodeURIComponent(message.sender) + '/messages', {
+    const menu = Array.isArray(commands) && commands.length && !this.buttonsUnavailable;
+    let result;
+    try { result = await this.json(API + '/v2/users/' + encodeURIComponent(message.sender) + '/messages', {
       method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'QQBot ' + this.token },
-      body: JSON.stringify({ msg_type: 0, content: String(text).slice(0, 1800), msg_id: message.id, msg_seq: sequence }),
-    });
+      body: JSON.stringify({ msg_id: message.id, msg_seq: sequence, ...(menu
+        ? { msg_type: 2, markdown: { content: String(text).slice(0, 1800).replace(/[\\`*_{}\[\]<>!|]/g, '\\$&') }, keyboard: commandKeyboard(commands, message.sender) }
+        : { msg_type: 0, content: String(text).slice(0, 1800) }) }),
+    }); } catch (error) {
+      // Retry only an explicit rejection of the optional menu, never an uncertain send.
+      if (menu && [400, 403].includes(error.httpStatus)) { this.buttonsUnavailable = true; return this.reply(message, text); }
+      throw error;
+    }
     if (typeof result.id !== 'string') throw new Error('qqProtocol');
   }
 
@@ -188,4 +209,4 @@ class QqClient extends EventEmitter {
   }
 }
 
-module.exports = { QqClient, API };
+module.exports = { QqClient, API, COMMANDS, suggestCommands, commandKeyboard };

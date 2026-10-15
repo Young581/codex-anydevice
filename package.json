@@ -1,8 +1,8 @@
 {
   "name": "codex-anydevice",
   "displayName": "Codex AnyDevice",
-  "description": "Start personal Codex tasks through an official QQ bot, with desktop pairing and approvals.",
-  "version": "0.4.0",
+  "description": "Start and continue personal Codex conversations through an official QQ bot, with remembered pairing and desktop approvals.",
+  "version": "0.6.2",
   "publisher": "Young581",
   "license": "MIT",
   "preview": true,
@@ -78,11 +78,42 @@
         "command": "codexAnyDevice.pairQQ",
         "title": "%command.pairQQ%",
         "category": "Codex AnyDevice"
+      },
+      {
+        "command": "codexAnyDevice.openGuide",
+        "title": "%command.openGuide%",
+        "category": "Codex AnyDevice"
+      },
+      {
+        "command": "codexAnyDevice.chooseCodex",
+        "title": "%command.chooseCodex%",
+        "category": "Codex AnyDevice"
+      },
+      {
+        "command": "codexAnyDevice.registerQQIdentity",
+        "title": "%command.registerQQIdentity%",
+        "category": "Codex AnyDevice"
+      },
+      {
+        "command": "codexAnyDevice.previewConfiguration",
+        "title": "%command.previewConfiguration%",
+        "category": "Codex AnyDevice"
+      },
+      {
+        "command": "codexAnyDevice.clearConfiguration",
+        "title": "%command.clearConfiguration%",
+        "category": "Codex AnyDevice"
       }
     ],
     "configuration": {
       "title": "Codex AnyDevice",
       "properties": {
+        "codexAnyDevice.commandButtons": {
+          "type": "boolean",
+          "default": false,
+          "scope": "machine",
+          "description": "%config.commandButtons%"
+        },
         "codexAnyDevice.codexPath": {
           "type": "string",
           "default": "",

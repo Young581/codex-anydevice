@@ -6,7 +6,7 @@ const { execFile } = require('node:child_process');
 const net = require('node:net');
 const { CodexSession, CODEX_VERSION } = require('./codex-session');
 const { run, version } = require('./runtime');
-const { validEndpoint } = require('./shared-proxy');
+const { validEndpoint, lines } = require('./shared-proxy');
 const KEY = 'codexAnyDevice.officialSync.v1';
 const OFFICIAL_VERSION = '26.51007.21434';
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -35,25 +35,17 @@ async function privateDirectory(directory) {
 }
 async function connectTransport(descriptor, receive, closed) {
   const endpoint = new URL(descriptor.url), socket = net.createConnection({ host: '127.0.0.1', port: Number(endpoint.port) });
-  let authenticated = false, buffer = '';
+  let authenticated = false;
   await new Promise((resolve, reject) => {
     const timer = setTimeout(() => { socket.destroy(); reject(new Error('syncUnavailable')); }, 8000);
-    socket.setEncoding('utf8');
     socket.on('connect', () => socket.write(JSON.stringify({ type: 'auth', token: descriptor.token }) + '\n'));
-    socket.on('data', chunk => {
-      buffer += chunk;
-      if (Buffer.byteLength(buffer) > 1024 * 1024) { closed('codexProtocol'); socket.destroy(); return; }
-      let end;
-      while ((end = buffer.indexOf('\n')) >= 0) {
-        const line = buffer.slice(0, end); buffer = buffer.slice(end + 1);
-        let message; try { message = JSON.parse(line); } catch { closed('codexProtocol'); socket.destroy(); return; }
-        if (!authenticated) {
-          clearTimeout(timer);
-          if (message.type !== 'authenticated') { reject(new Error('syncUnavailable')); socket.destroy(); return; }
-          authenticated = true; resolve();
-        } else receive(message);
-      }
-    });
+    lines(socket, message => {
+      if (!authenticated) {
+        clearTimeout(timer);
+        if (message.type !== 'authenticated') { reject(new Error('syncUnavailable')); socket.destroy(); return; }
+        authenticated = true; resolve();
+      } else receive(message);
+    }, () => { clearTimeout(timer); reject(new Error('syncUnavailable')); closed('codexProtocol'); socket.destroy(); });
     socket.on('error', () => { clearTimeout(timer); reject(new Error('syncUnavailable')); closed('codexDisconnected'); });
     socket.on('close', () => { clearTimeout(timer); if (!authenticated) reject(new Error('syncUnavailable')); closed('codexDisconnected'); });
   });
@@ -91,7 +83,12 @@ class SharedIntegration {
     const launcher = await (this.options.prepare || this.prepare.bind(this))(spec);
     const config = this.configuration(), inspected = config.inspect('cliExecutable');
     if (inspected?.workspaceValue !== undefined || inspected?.workspaceFolderValue !== undefined) throw new Error('syncOverride');
-    if (this.state().enabled && inspected?.globalValue === launcher) return;
+    if (this.state().enabled && inspected?.globalValue === launcher) {
+      this.ready = false;
+      const choice = await this.vscode.window.showInformationMessage(this.t.syncReload, this.t.reload);
+      if (choice === this.t.reload) await this.vscode.commands.executeCommand('workbench.action.reloadWindow');
+      return;
+    }
     const answer = await this.vscode.window.showWarningMessage(this.t.syncConfirm, { modal: true, detail: this.t.syncDetail }, this.t.syncAllow);
     if (answer !== this.t.syncAllow) return;
     const latest = config.inspect('cliExecutable');
@@ -138,10 +135,14 @@ class SharedIntegration {
       onThread: async threadId => {
         if (session.closed) throw new Error('codexDisconnected');
         await this.openThread(threadId);
-        const deadline = Date.now() + 20000;
+        const deadline = Date.now() + (this.options.joinTimeoutMs || 20000);
+        let retryAt = Date.now() + (this.options.joinRetryMs || 1500);
         while (!session.closed && Date.now() < deadline) {
           if (session.active?.cancelRequested) return;
           if (session.active?.desktopJoined) { this.ready = true; return; }
+          // URI navigation can arrive before the official webview has mounted.
+          // Repeat only this public navigation, and still require backend proof.
+          if (Date.now() >= retryAt) { await this.openThread(threadId); retryAt = Date.now() + (this.options.joinRetryMs || 1500); }
           await pause(100);
         }
         throw new Error('syncNotReady');

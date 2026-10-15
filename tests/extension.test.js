@@ -45,6 +45,18 @@ test('English status describes configuration progress without asserting phone co
   assert.match(instance.calls[0][1], /未连接|disconnected/);
 });
 
+test('disconnected status distinguishes remembered pairing from first-time setup', async () => {
+  for (const language of ['zh-cn', 'en']) {
+    const instance = host(language), { controller } = instance.activate();
+    await controller.store.saveBot('123456789', 'synthetic_secret');
+    await controller.store.saveProject({ name: 'synthetic', path: root }); await controller.store.confirmSender('synthetic_sender_001');
+    await instance.commands.get('codexAnyDevice.showStatus')();
+    assert.ok(instance.calls.at(-1)[1].includes(controller.t.reconnectRemembered));
+    assert.equal(controller.direct.status, 'disconnected');
+    for (const disposable of instance.context.subscriptions) disposable.dispose();
+  }
+});
+
 test('setup reuses one webview with a restrictive CSP', async () => {
   const instance = host(); const { controller } = instance.activate();
   await instance.commands.get('codexAnyDevice.openSetup')();
@@ -52,6 +64,11 @@ test('setup reuses one webview with a restrictive CSP', async () => {
   assert.match(panel.webview.html, /default-src 'none'/);
   assert.match(panel.webview.html, /script-src 'nonce-/);
   assert.doesNotMatch(panel.webview.html, /unsafe-inline/);
+  assert.doesNotMatch(panel.webview.html, /<details|id="(?:advancedTitle|runtime|authNote|identityNote|secretNote|preview|codexPath|clear)"/);
+  for (const action of ['selectProject', 'authorizeProject', 'connect', 'pair', 'selectConversation',
+    'viewHistory', 'nextHistory', 'commandButtons', 'disableSync', 'cancel', 'showResult', 'guide']) {
+    assert.ok(panel.webview.html.includes(`data-action="${action}"`));
+  }
   await instance.commands.get('codexAnyDevice.openSetup')();
   assert.equal(controller.panel, panel);
   assert.deepEqual(instance.calls, [['reveal']]);

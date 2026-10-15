@@ -1,10 +1,16 @@
 {
-  "command.openSetup": "打开个人 QQ 配置向导",
+  "config.commandButtons": "在 QQ 帮助与指令提示中发送填入按钮。需要 QQ 自定义按钮权限；点击只填入输入框，不自动发送。纯文字提示始终可用。",
+  "command.openSetup": "打开管理面板",
   "command.checkEnvironment": "检查 Codex 环境",
   "config.codexPath": "Codex 的绝对路径。留空时从 PATH 或已安装的 Codex 扩展发现。",
   "command.openResearch": "打开调研与开发方案",
-  "command.showStatus": "查看开发状态",
+  "command.showStatus": "查看连接状态",
   "command.connectQQ": "连接 QQ 官方机器人",
   "command.disconnectQQ": "断开 QQ 机器人",
-  "command.pairQQ": "配对本人 QQ"
+  "command.pairQQ": "配对本人 QQ",
+  "command.openGuide": "打开使用说明",
+  "command.chooseCodex": "排障：指定 Codex 路径",
+  "command.registerQQIdentity": "排障：登记已有 QQ OpenID",
+  "command.previewConfiguration": "排障：预览配置摘要",
+  "command.clearConfiguration": "清除本插件的配置"
 }

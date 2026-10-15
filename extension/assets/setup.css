@@ -6,16 +6,13 @@ header { margin-bottom: 26px; }
 .eyebrow { color: var(--vscode-descriptionForeground); font-size: 11px; font-weight: 700; letter-spacing: .16em; }
 h1 { font-size: 29px; line-height: 1.3; font-weight: 600; margin: 12px 0 8px; }
 h2 { margin: 0 0 6px; font-size: 17px; font-weight: 600; }
+h3 { margin: 22px 0 10px; font-size: 14px; font-weight: 600; }
 p { margin: 0; line-height: 1.65; color: var(--vscode-descriptionForeground); }
 .progress { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; margin-top: 20px; padding: 11px 14px; border-radius: 6px; background: var(--vscode-textBlockQuote-background); }
 #stage { color: var(--vscode-foreground); }
 section { margin: 14px 0; padding: 22px; border: 1px solid var(--vscode-panel-border); border-radius: 8px; }
 .heading { display: flex; align-items: flex-start; gap: 13px; margin-bottom: 18px; }
 .number { display: grid; place-items: center; flex: 0 0 27px; height: 27px; border-radius: 50%; color: var(--vscode-button-foreground); background: var(--vscode-button-background); font-size: 12px; font-weight: 700; }
-.runtime { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-bottom: 14px; }
-.runtime-item { padding: 10px 12px; background: var(--vscode-textBlockQuote-background); border-radius: 5px; overflow-wrap: anywhere; }
-.runtime-item strong { display: block; margin-bottom: 4px; font-size: 12px; font-weight: 600; }
-.runtime-item span { color: var(--vscode-descriptionForeground); }
 .facts { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-bottom: 9px; }
 .facts span::before { content: '○'; margin-right: 7px; color: var(--vscode-descriptionForeground); }
 .facts span.done::before { content: '✓'; color: var(--vscode-testing-iconPassed); }
@@ -29,13 +26,12 @@ button:hover { background: var(--vscode-button-hoverBackground); }
 button.secondary { color: var(--vscode-button-secondaryForeground); background: var(--vscode-button-secondaryBackground); }
 button.secondary:hover { background: var(--vscode-button-secondaryHoverBackground); }
 button:disabled { opacity: .5; cursor: default; }
-button:focus-visible, summary:focus-visible { outline: 2px solid var(--vscode-focusBorder); outline-offset: 2px; }
-details { margin-top: 13px; }
-summary { color: var(--vscode-descriptionForeground); font-size: 12px; cursor: pointer; }
+button:focus-visible { outline: 2px solid var(--vscode-focusBorder); outline-offset: 2px; }
 .text-button { margin: 12px 0 0; padding: 4px 0; background: none; color: var(--vscode-textLink-foreground); }
 .text-button:hover { background: none; text-decoration: underline; }
 footer { padding: 8px 2px; }
 #notice { margin-top: 10px; color: var(--vscode-foreground); }
 #pairingCode { padding: 12px; border-radius: 5px; background: var(--vscode-textBlockQuote-background); white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--vscode-editor-font-family); }
 #directError, #taskState { margin-top: 10px; overflow-wrap: anywhere; }
-@media (max-width: 480px) { main { padding: 22px 14px; } section { padding: 17px 14px; } h1 { font-size: 25px; } .runtime { grid-template-columns: 1fr; } .actions { flex-direction: column; align-items: stretch; } }
+#commandButtonsNote { margin-top: 8px; }
+@media (max-width: 480px) { main { padding: 22px 14px; } section { padding: 17px 14px; } h1 { font-size: 25px; } .actions { flex-direction: column; align-items: stretch; } }

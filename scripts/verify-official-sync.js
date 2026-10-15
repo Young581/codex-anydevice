@@ -53,7 +53,10 @@ const pause=ms=>new Promise(r=>setTimeout(r,ms));
   fs.writeFileSync(path.join(base,'owned-pids.json'),JSON.stringify({host:host.pid,main:process.pid}));
   for(let i=0;i<350;i++){if(fs.existsSync(path.join(base,'mobile-thread'))||fs.existsSync(path.join(base,'result.json')))break;await pause(100);}
   for(let i=0;i<100&&!finishResponse&&!fs.existsSync(path.join(base,'result.json'));i++)await pause(100);
-  if(!finishResponse)console.log(JSON.stringify({hostStage:fs.existsSync(path.join(base,'host-stage.json'))?fs.readFileSync(path.join(base,'host-stage.json'),'utf8'):'not-run'}));assert.ok(finishResponse,'Production phone turn was submitted');
+  if(!finishResponse){
+   const snapshot=spawn(process.execPath,[path.join(repository,'tests/host/inspect-official-sync.js'),'--snapshot'],{env:{...env,ELECTRON_RUN_AS_NODE:'1'},stdio:['ignore','pipe','ignore'],windowsHide:true});snapshot.stdout.pipe(process.stdout);await new Promise(r=>snapshot.on('exit',r));
+   console.log(JSON.stringify({hostStage:fs.existsSync(path.join(base,'host-stage.json'))?fs.readFileSync(path.join(base,'host-stage.json'),'utf8'):'not-run',diagnosticDirectory:path.basename(base)}));
+  }assert.ok(finishResponse,'Production phone turn was submitted');
   inspector=spawn(process.execPath,[path.join(repository,'tests/host/inspect-official-sync.js')],{env:{...env,ELECTRON_RUN_AS_NODE:'1'},stdio:['ignore','pipe','ignore'],windowsHide:true});inspector.stdout.pipe(process.stdout);
   const inspectDone=new Promise(r=>inspector.on('exit',r));
   for(let i=0;i<350;i++){if(fs.existsSync(path.join(base,'live-confirmed'))||inspector.exitCode!==null)break;await pause(100);}
@@ -61,6 +64,6 @@ const pause=ms=>new Promise(r=>setTimeout(r,ms));
   const code=await inspectDone;fs.writeFileSync(path.join(base,'done'),'done');
   for(let i=0;i<300;i++){try{if(JSON.parse(fs.readFileSync(path.join(base,'result.json'),'utf8')).recoveryCompleted)break;}catch{}await pause(100);}
   const result=JSON.parse(fs.readFileSync(path.join(base,'result.json'),'utf8'));
-  console.log(JSON.stringify({productionResult:result,inspectionExit:code,localMockCalls:calls,authenticatedCalls,realModelCalls:0}));assert.ok(live);assert.equal(code,0);assert.equal(calls,4);assert.equal(authenticatedCalls,4);assert.equal(result.status,'completed');assert.equal(result.cancelled,true);assert.equal(result.recoveryCompleted,true);
+  console.log(JSON.stringify({productionResult:result,inspectionExit:code,localMockCalls:calls,authenticatedCalls,realModelCalls:0}));assert.ok(live);assert.equal(code,0);assert.equal(calls,4);assert.equal(authenticatedCalls,4);assert.equal(result.status,'completed');assert.equal(result.cancelled,true);assert.equal(result.recoveryCompleted,true);assert.equal(result.sameThreadPhoneResumed,true);assert.equal(result.externalProject,true);assert.equal(result.dialogueHistoryRead,true);
  }finally{fs.writeFileSync(path.join(base,'done'),'cleanup');inspector?.kill();host.kill();provider.closeAllConnections();await new Promise(r=>provider.close(r));}
 })().catch(e=>{console.log(JSON.stringify({failure:e.code||(/^[\w-]+$/.test(e.message)?e.message:'synthetic-production-failed')}));process.exitCode=1;});

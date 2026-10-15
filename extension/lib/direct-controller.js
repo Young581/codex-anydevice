@@ -4,9 +4,9 @@ const fs = require('node:fs/promises');
 const net = require('node:net');
 const os = require('node:os');
 const { createHash, randomBytes, timingSafeEqual } = require('node:crypto');
-const { QqClient } = require('./qq-client');
+const { QqClient, suggestCommands } = require('./qq-client');
 const { CodexSession, CODEX_ERRORS, CODEX_PHASES } = require('./codex-session');
-const { SECRET_KEY, validProject, validSender, readiness } = require('./setup-model');
+const { SECRET_KEY, validProject, validSender, validThreadId, confirmed, authorized, readiness } = require('./setup-model');
 const JOURNAL_KEY = 'codexAnyDevice.direct.v1';
 const ACTIVE = new Set(['starting', 'running', 'waitingApproval', 'cancelling']);
 const digest = value => createHash('sha256').update(value).digest('hex');
@@ -55,6 +55,9 @@ class DirectController {
       this.queue = this.queue.then(() => epoch === this.epoch && this.handle(message, epoch))
         .catch(error => {
           if (epoch !== this.epoch) return;
+          if (['syncRequired', 'threadBusy', 'threadMissing', 'threadProject', 'continueMissing', 'syncBusy', 'projectUnauthorized', 'projectMissing', 'invalidProject', 'historyEnd'].includes(error.message)) {
+            return this.reply(message, this.t[error.message], epoch);
+          }
           this.error = ERRORS.has(error.message) ? error.message : 'operationFailed';
           return this.disconnect().catch(() => {});
         }).finally(() => { this.pending--; });
@@ -64,10 +67,13 @@ class DirectController {
   changed() { this.options.onChange?.(); }
   now() { return (this.options.now || Date.now)(); }
   snapshot() {
-    return { status: this.status, paired: Boolean(this.allowed), task: this.data.last,
-      busy: Boolean(this.task), deliveryFailed: this.deliveryFailed, error: this.error || this.data.last?.error,
+    const state = this.store.read();
+    return { status: this.status, paired: Boolean(this.allowed), remembered: confirmed(state), task: this.data.last,
+      busy: Boolean(this.task || this.switching), deliveryFailed: this.deliveryFailed, error: this.error || this.data.last?.error,
+      buttonsUnavailable: Boolean(this.qq.buttonsUnavailable),
       phase: this.currentPhase || this.data.last?.phase,
-      hasResult: Boolean(this.output), hasThread: Boolean(this.latestThread), readOnly: this.readOnly,
+      hasResult: Boolean(this.output), hasThread: Boolean(this.latestThread || state.conversationId), readOnly: this.readOnly,
+      conversation: state.conversationId ? this.threads?.find(thread => thread.id === state.conversationId)?.name || this.t.conversationSelected : undefined,
       pairingCode: this.pairing && this.now() < this.pairing.expires ? this.pairing.code : undefined };
   }
   async persist() {
@@ -91,7 +97,7 @@ class DirectController {
       if (resolved !== current.project.path || !(await fs.stat(resolved)).isDirectory()) throw new Error();
     } catch { throw new Error('invalidProject'); }
     if (this.selected && (current.appId !== this.selected.appId || resolved !== this.selected.project.path
-      || (this.allowed && current.senderId !== this.allowed))) throw new Error('configurationChanged');
+      || (this.allowed && (current.senderId !== this.allowed || !authorized(current))))) throw new Error('configurationChanged');
     return current;
   }
   valid(epoch, operation) {
@@ -104,12 +110,23 @@ class DirectController {
     let release;
     try {
       const selected = await this.project();
+      if (confirmed(selected) && !authorized(selected)) {
+        const answer = await this.vscode.window.showWarningMessage(this.t.connectConfirm, { modal: true,
+          detail: this.t.pairIdentity + '\n' + selected.senderId + '\n\n' + selected.project.path + '\n\n' + this.t.connectDetail }, this.t.connectAllow);
+        if (answer !== this.t.connectAllow || epoch !== this.epoch || !this.local()) return;
+        const current = await this.project();
+        if (current.appId !== selected.appId || current.senderId !== selected.senderId || current.project.path !== selected.project.path || !confirmed(current)) throw new Error('configurationChanged');
+        await this.store.authorizeProject(() => epoch === this.epoch && this.local()
+          && this.store.read().appId === selected.appId && this.store.read().senderId === selected.senderId
+          && this.store.read().project?.path === selected.project.path);
+      }
       const latest = await this.project();
       if (epoch !== this.epoch || latest.appId !== selected.appId || latest.project.path !== selected.project.path) return;
       release = await (this.options.reserve || reserveBot)(selected.appId);
       if (epoch !== this.epoch || !this.local()) { await release(); release = undefined; return; }
       this.release = release; release = undefined;
-      this.selected = selected; this.spec = spec; this.allowed = undefined; this.deliveryFailed = false; this.error = undefined;
+      this.selected = latest; this.spec = spec; this.allowed = authorized(latest) ? latest.senderId : undefined;
+      this.latestThread = latest.conversationId; this.deliveryFailed = false; this.error = undefined;
       const secret = await this.context.secrets.get(SECRET_KEY);
       if (!this.valid(epoch)) { if (epoch === this.epoch) await this.disconnect(); return; }
       await this.qq.start(selected.appId, secret);
@@ -143,9 +160,13 @@ class DirectController {
     }
     await this.persist(); return false;
   }
-  async reply(message, text, epoch = this.epoch) {
+  async reply(message, text, epoch = this.epoch, commands) {
     if (!this.valid(epoch)) return;
-    try { await this.qq.reply(message, text); } catch {
+    try {
+      const buttonsUnavailable = this.qq.buttonsUnavailable;
+      await this.qq.reply(message, text, this.options.commandButtons?.() ? commands : undefined);
+      if (buttonsUnavailable !== this.qq.buttonsUnavailable) this.changed();
+    } catch {
       if (epoch === this.epoch) { this.deliveryFailed = true; this.changed(); }
     }
   }
@@ -172,27 +193,130 @@ class DirectController {
       }, this.t.pairAllow);
       if (answer !== this.t.pairAllow || !this.valid(epoch) || this.now() >= pairing.expires || generation !== this.pairGeneration) return;
       await this.project(); if (!this.valid(epoch)) return;
-      await this.store.saveSender(message.sender); if (!this.valid(epoch)) return;
+      await this.store.confirmSender(message.sender, () => this.valid(epoch) && generation === this.pairGeneration
+        && this.now() < pairing.expires && this.store.read().project?.path === selected.project.path
+        && this.store.read().appId === selected.appId); if (!this.valid(epoch)) return;
       this.allowed = message.sender; this.changed(); await this.reply(message, this.t.phonePaired, epoch); return;
     }
     if (!this.allowed || message.sender !== this.allowed || this.store.read().senderId !== this.allowed) return;
     if (await this.duplicate(message) || !this.valid(epoch)) return;
     await this.project(); if (!this.valid(epoch)) return;
     if (message.text === '/status') {
-      await this.reply(message, this.taskStatus(), epoch);
+      await this.reply(message, this.t.currentProject + ': ' + this.store.read().project.name + '\n' + this.taskStatus()
+        + (this.store.read().conversationId ? '\n' + this.t.conversationSelected : ''), epoch);
     } else if (message.text === '/cancel') {
       if (this.task) { await this.cancel(); await this.reply(message, this.t.phoneCancelling, epoch); }
       else await this.reply(message, this.t.noTask, epoch);
-    } else if (message.text.startsWith('/new ') && message.text.slice(5).trim()) {
+    } else if (message.text === '/projects') {
+      this.projectList = (this.store.read().projects || []).filter(project => project.authorized);
+      await this.reply(message, this.t.phoneProjects + '\n' + this.projectList.map((project, i) => `${i + 1}. ${project.name.slice(0, 48)}${project.path === this.selected.project.path ? ' *' : ''}`).join('\n') + '\n' + this.t.phoneProjectUse, epoch, ['/project ']);
+    } else if (/^\/project\s+\d+$/.test(message.text)) {
+      if (this.task || this.switching) { await this.reply(message, this.t.phoneBusy, epoch); return; }
+      const target = this.projectList?.[Number(message.text.split(/\s+/)[1]) - 1];
+      if (!target) { await this.reply(message, this.t.phoneProjectUse, epoch); return; }
+      await this.switchProject(target.path);
+      await this.reply(message, this.t.currentProject + ': ' + this.store.read().project.name + '\n' + this.t.phoneHelp, epoch);
+    } else if (message.text === '/sessions' || message.text === '/sessions next') {
       if (this.task) { await this.reply(message, this.t.phoneBusy, epoch); return; }
-      const operation = { id: randomBytes(6).toString('hex'), status: 'starting', cancelRequested: false };
+      if (message.text.endsWith(' next') && !this.sessionsCursor) { await this.reply(message, this.t.noMoreSessions, epoch); return; }
+      const threads = await this.listConversations(message.text.endsWith(' next') ? this.sessionsCursor : undefined);
+      if (!this.valid(epoch)) return;
+      await this.reply(message, threads.length ? this.t.phoneSessions + '\n' + threads.map((thread, i) => `${i + 1}. ${thread.name}${thread.status === 'active' ? ' · ' + this.t.running : ''}`).join('\n') + '\n' + this.t.phoneUse + (this.sessionsCursor ? '\n' + this.t.moreSessions : '') : this.t.noConversations, epoch, ['/use ', '/sessions next', '/history']);
+    } else if (/^\/use\s+\d+$/.test(message.text)) {
+      const index = Number(message.text.split(/\s+/)[1]) - 1;
+      const target = this.threads?.[index];
+      if (!target) { await this.reply(message, this.t.phoneUse, epoch); return; }
+      await this.selectConversation(target.id);
+      await this.reply(message, this.t.conversationSelected + ': ' + target.name, epoch);
+    } else if (/^\/history(?:\s+(?:\d+|next))?$/.test(message.text)) {
+      const argument = message.text.split(/\s+/)[1];
+      const threadId = argument && argument !== 'next' ? this.threads?.[Number(argument) - 1]?.id : undefined;
+      if (argument && argument !== 'next' && !threadId) { await this.reply(message, this.t.historyHelp, epoch); return; }
+      const result = await this.readHistory(threadId, argument === 'next');
+      await this.reply(message, this.t.historyTitle + '\n' + (result.text || this.t.noHistory)
+        + '\n' + (result.next ? this.t.historyMore : this.t.historyEnd), epoch, ['/history next', '/continue ']);
+    } else if ((message.text.startsWith('/new ') && message.text.slice(5).trim())
+      || (message.text.startsWith('/continue ') && message.text.slice(10).trim())) {
+      if (this.task) { await this.reply(message, this.t.phoneBusy, epoch); return; }
+      const continuing = message.text.startsWith('/continue '), threadId = continuing ? this.store.read().conversationId : undefined;
+      if (continuing && !threadId) { await this.reply(message, this.t.continueMissing, epoch); return; }
+      const operation = { id: randomBytes(6).toString('hex'), status: 'starting', cancelRequested: false, threadId };
       this.task = operation; this.data.last = { id: operation.id, status: 'starting' }; this.output = ''; this.error = undefined;
       this.currentPhase = undefined; this.readOnly = undefined;
-      this.latestThread = undefined;
+      if (!continuing) this.latestThread = undefined;
       try { await this.persist(); } catch (error) { this.task = undefined; this.data.last.status = 'unknown'; throw error; }
       this.changed(); await this.reply(message, this.t.phoneAccepted + operation.id, epoch);
-      void this.execute(operation, message.text.slice(5).trim(), message, epoch);
-    } else await this.reply(message, this.t.phoneHelp, epoch);
+      void this.execute(operation, message.text.slice(continuing ? 10 : 5).trim(), message, epoch);
+    } else {
+      const prefix = message.text === '/help' ? '/' : message.text;
+      const suggestions = /^\/[a-z]*$/i.test(prefix) || prefix === '/' ? suggestCommands(prefix) : [];
+      await this.reply(message, this.t.phoneHelp + (suggestions.length ? '\n\n' + this.t.commandSuggestions + '\n' + suggestions.join('\n') : ''), epoch, suggestions);
+    }
+  }
+  async switchProject(projectPath) {
+    const epoch = this.epoch;
+    if (!this.valid(epoch) || !this.allowed || this.task || this.switching) throw new Error('syncBusy');
+    const current = await this.project();
+    const project = current.projects?.find(item => item.path === projectPath && item.authorized);
+    if (!project) throw new Error('projectUnauthorized');
+    try { if (await fs.realpath(project.path) !== project.path || !(await fs.stat(project.path)).isDirectory()) throw new Error(); }
+    catch { throw new Error('invalidProject'); }
+    if (!this.valid(epoch) || this.task) throw new Error('configurationChanged');
+    this.switching = true; this.changed();
+    try {
+      await this.store.switchProject(projectPath, () => this.valid(epoch) && !this.task
+        && this.store.read().appId === current.appId && this.store.read().senderId === current.senderId
+        && this.store.read().project?.path === current.project.path);
+      if (!this.valid(epoch)) return;
+      this.selected = this.store.read(); this.scopeRevision = (this.scopeRevision || 0) + 1;
+      await this.resetProjectView();
+    } finally { this.switching = false; this.changed(); }
+  }
+  async resetProjectView() {
+    this.latestThread = this.store.read().conversationId; this.threads = undefined; this.sessionsCursor = undefined; this.history = undefined;
+    this.output = ''; this.data.last = undefined; this.error = undefined; this.currentPhase = undefined; this.readOnly = undefined;
+    await this.persist(); this.changed();
+  }
+  async querySession(action) {
+    const epoch = this.epoch;
+    if (!this.valid(epoch) || this.status !== 'connected' || !this.allowed) throw new Error('qqNotConnected');
+    if (this.task || this.switching) throw new Error('syncBusy');
+    const revision = this.scopeRevision;
+    const selected = await this.project();
+    const session = await (this.options.createSession || (spec => new CodexSession(spec)))(this.spec);
+    try {
+      if (!this.valid(epoch) || this.task || this.switching || revision !== this.scopeRevision) throw new Error('configurationChanged');
+      await session.start(selected.project.path);
+      const result = await action(session, selected.project.path);
+      await this.project();
+      if (!this.valid(epoch) || this.task || this.switching || revision !== this.scopeRevision) throw new Error('configurationChanged');
+      return result;
+    } finally { session.stop(); }
+  }
+  async listConversations(cursor) {
+    this.threads = await this.querySession((session, cwd) => session.listThreads(cwd, cursor));
+    this.sessionsCursor = this.threads.nextCursor;
+    this.changed(); return this.threads;
+  }
+  async readHistory(threadId, next = false) {
+    if (next && !this.history?.next) throw new Error('historyEnd');
+    const target = next ? this.history.threadId : threadId || this.store.read().conversationId;
+    const page = next ? this.history.next : undefined;
+    if (!target) throw new Error('continueMissing');
+    const result = await this.querySession((session, cwd) => session.readHistory(target, cwd, page));
+    this.history = { threadId: target, next: result.next }; return result;
+  }
+  async selectConversation(threadId) {
+    const epoch = this.epoch;
+    if (!validThreadId(threadId)) throw new Error('threadMissing');
+    await this.querySession(async (session, cwd) => { await session.checkThread(threadId, cwd); });
+    await this.project();
+    await this.store.saveConversation(threadId, () => this.valid(epoch) && !this.task);
+    if (!this.valid(epoch)) return;
+    this.latestThread = threadId; this.history = undefined; this.changed();
+  }
+  async forgetPairing() {
+    await this.disconnect(); await this.store.forgetPairing(); this.latestThread = undefined; this.threads = undefined; this.changed();
   }
   async execute(operation, prompt, source, epoch) {
     let result = { status: 'unknown', output: '' }; let session;
@@ -232,7 +356,10 @@ class DirectController {
       operation.status = 'running'; this.data.last = { id: operation.id, status: 'running', phase: this.currentPhase }; await this.persist();
       if (!this.valid(epoch, operation)) return;
       if (operation.cancelRequested) { result.status = 'cancelled'; return; }
-      this.changed(); result = await session.execute(prompt, selected.project.path);
+      this.changed(); result = await session.execute(prompt, selected.project.path, operation.threadId);
+      if (this.valid(epoch, operation) && validThreadId(result.threadId)) {
+        await this.project(); await this.store.saveConversation(result.threadId, () => this.valid(epoch, operation)); this.latestThread = result.threadId;
+      }
       if (this.valid(epoch, operation) && session.failure) this.error = ERRORS.has(session.failure) ? session.failure : 'codexTaskFailed';
     } catch (error) {
       if (this.valid(epoch, operation)) {
@@ -289,7 +416,8 @@ class DirectController {
     const release = this.release; this.release = undefined;
     const session = this.session; this.session = undefined;
     const operation = this.task; this.task = undefined; this.selected = undefined; this.spec = undefined;
-    this.qq.stop(); this.status = state; session?.stop();
+    this.qq.stop(); this.status = state; session?.stop(); this.threads = undefined; this.projectList = undefined;
+    this.history = undefined; this.sessionsCursor = undefined;
     if (operation) this.data.last = { id: operation.id, status: 'unknown', error: 'codexDisconnected', phase: this.currentPhase };
     try { if (operation) await this.persist(); }
     finally { if (release) await release(); this.changed(); }

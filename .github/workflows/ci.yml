@@ -33,6 +33,8 @@ jobs:
         run: node --test tests/extension.test.js tests/setup.test.js tests/runtime.test.js tests/direct.test.js
       - name: Package boundary checks
         run: python -B tests/package_validation.py
+      - name: Release integrity checks
+        run: python -B tests/release_validation.py
       - name: Build development VSIX
         run: python -B build.py --output dist
       - name: Audit the exact development VSIX
@@ -46,3 +48,38 @@ jobs:
             dist/*.vsix
             dist/*.sha256
           if-no-files-found: error
+
+  release:
+    name: Prepare version tag and release
+    needs: checks
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'Young581/codex-anydevice'
+    runs-on: windows-latest
+    concurrency:
+      group: codex-anydevice-release
+      cancel-in-progress: false
+    permissions:
+      contents: write
+    env:
+      PYTHONUTF8: '1'
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Package with pinned official vsce
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          npm exec --yes --ignore-scripts --package=@vscode/vsce@4.0.0 -- vsce package --no-dependencies --no-rewrite-relative-links --out dist/release.vsix
+      - name: Audit official release package
+        run: python -B packaging/release-audit.py dist/release.vsix
+      - name: Create immutable tag and upload draft release assets
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python -B scripts/github-release.py --prepare dist/release.vsix

@@ -10,10 +10,11 @@ const base=process.env.ANYDEVICE_POC_BASE,pause=ms=>new Promise(r=>setTimeout(r,
   assert.equal(endpoint.protocol,'ws:');assert.equal(endpoint.hostname,'127.0.0.1');assert.equal(endpoint.port,port);assert.equal(endpoint.pathname,browser);
   remote=candidate;break;
  }catch{await pause(200);}}
- assert.ok(remote);const ws=new WebSocket(remote.webSocketDebuggerUrl);let next=0;const pending=new Map(),contexts=new Map(),attached=new Map();
+ assert.ok(remote);const ws=new WebSocket(remote.webSocketDebuggerUrl);let next=0;const pending=new Map(),contexts=new Map(),attached=new Map(),exceptions=[];
  ws.addEventListener('message',e=>{const m=JSON.parse(e.data);if(m.id){const p=pending.get(m.id);if(p){pending.delete(m.id);m.error?p.reject(Error('cdp-failed')):p.resolve(m.result);}}
   else if(m.method==='Runtime.executionContextCreated'){const c=m.params.context;if(c.auxData?.isDefault)contexts.set(m.sessionId+':'+c.id,{sessionId:m.sessionId,id:c.id});}
-  else if(m.method==='Runtime.executionContextDestroyed')contexts.delete(m.sessionId+':'+m.params.executionContextId);});
+  else if(m.method==='Runtime.executionContextDestroyed')contexts.delete(m.sessionId+':'+m.params.executionContextId);
+  else if(m.method==='Runtime.exceptionThrown')exceptions.push(m.params.exceptionDetails?.exception?.description||m.params.exceptionDetails?.text);});
  await new Promise((resolve,reject)=>{ws.addEventListener('open',resolve,{once:true});ws.addEventListener('error',reject,{once:true});});
  const call=(method,params={},sessionId)=>new Promise((resolve,reject)=>{const id=++next,t=setTimeout(()=>{pending.delete(id);reject(Error('cdp-timeout'));},5000);
   pending.set(id,{resolve:v=>{clearTimeout(t);resolve(v);},reject:e=>{clearTimeout(t);reject(e);}});ws.send(JSON.stringify({id,method,params,...sessionId?{sessionId}:{}}));});
@@ -29,6 +30,7 @@ const base=process.env.ANYDEVICE_POC_BASE,pause=ms=>new Promise(r=>setTimeout(r,
    if(summary?.live){panel=c;lastSummary=summary;break;}
    if(summary?.inputCount||summary?.signIn)lastSummary=summary;
   }catch{}
+  if(process.argv.includes('--snapshot')&&i===8){const details=[];for(const c of contexts.values())try{details.push(await evaluate(c,`({href:location.protocol,ready:document.readyState,body:document.body.innerText.slice(0,3500),html:document.body.innerHTML.slice(0,2200),scripts:[...document.scripts].map(s=>s.src.split('/').at(-1))})`));}catch{}await fs.writeFile(path.join(base,'startup-inspection.json'),JSON.stringify({lastSummary,details,exceptions}));ws.close();return;}
   if(panel)break;await pause(150);
  }
  console.log(JSON.stringify({nativeUiLiveSummary:lastSummary}));

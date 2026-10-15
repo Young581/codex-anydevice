@@ -1,10 +1,16 @@
 {
-  "command.openSetup": "Open personal QQ setup wizard",
+  "config.commandButtons": "Send QQ command input buttons with help and suggestions. Requires QQ custom-button permission; buttons fill input without automatically sending. Text hints remain available.",
+  "command.openSetup": "Open management panel",
   "command.checkEnvironment": "Check Codex environment",
   "config.codexPath": "Absolute path to Codex. Leave empty to discover PATH or the installed Codex extension.",
   "command.openResearch": "Open research and development plan",
-  "command.showStatus": "Show development status",
+  "command.showStatus": "Show connection status",
   "command.connectQQ": "Connect official QQ bot",
   "command.disconnectQQ": "Disconnect QQ bot",
-  "command.pairQQ": "Pair my QQ"
+  "command.pairQQ": "Pair my QQ",
+  "command.openGuide": "Open user guide",
+  "command.chooseCodex": "Troubleshoot: Choose Codex path",
+  "command.registerQQIdentity": "Troubleshoot: Record an existing QQ OpenID",
+  "command.previewConfiguration": "Troubleshoot: Preview setup summary",
+  "command.clearConfiguration": "Clear this extension’s configuration"
 }

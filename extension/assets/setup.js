@@ -4,17 +4,6 @@ const vscode = acquireVsCodeApi();
 let current;
 const byId = (id) => document.getElementById(id);
 
-function showRuntime(label, status) {
-  const item = document.createElement('div');
-  item.className = 'runtime-item';
-  const name = document.createElement('strong');
-  name.textContent = label;
-  const value = document.createElement('span');
-  value.textContent = status;
-  item.append(name, value);
-  byId('runtime').append(item);
-}
-
 function update(model) {
   current = model;
   const t = model.strings;
@@ -24,42 +13,51 @@ function update(model) {
   }
   document.documentElement.lang = model.language;
   byId('stage').textContent = model.direct?.paired ? t.paired : t[model.direct?.status] || t.disconnected;
-  byId('progress').textContent = model.direct?.paired ? t.readyTask : t.needsPairing;
+  byId('progress').textContent = model.direct?.paired ? t.readyTask : model.direct?.remembered ? t.reconnectRemembered : t.needsPairing;
   byId('botState').textContent = model.ready.bot ? t.botSaved : t.botMissing;
   byId('identityState').textContent = model.ready.identity ? t.identitySaved : t.identityMissing;
+  if (model.direct?.remembered) byId('identityState').textContent = t.pairRemembered;
   if (model.direct?.paired) byId('identityState').textContent = t.paired;
   byId('botState').classList.toggle('done', model.ready.bot);
   byId('identityState').classList.toggle('done', model.ready.identity);
   byId('projectName').textContent = model.project?.name || t.projectMissing;
   byId('projectPath').textContent = model.project?.path || '';
+  byId('projectCount').textContent = (model.projects?.length || 0) + ' · ' + t.savedProjects;
   byId('notice').textContent = model.notice || '';
-  byId('runtime').replaceChildren();
-  const env = model.environment;
-  const status = (tool) => !env ? t.untested : !tool?.found ? t.missing : tool.version || t.unknown;
-  showRuntime('Codex', status(env?.codex));
-  showRuntime(t.authLabel, !env ? t.untested : !env.codex?.found ? t.missing : t[env.codex.login] || t.unknown);
-  if (env?.codex.detectedShim) showRuntime('Codex', t.shimHint);
   for (const button of document.querySelectorAll('button[data-action]')) {
-    button.disabled = model.busy || (!model.complete && button.dataset.action === 'preview');
+    button.disabled = model.busy;
   }
   const direct = model.direct || { status: 'disconnected' };
+  byId('authorizeProject').disabled = model.busy || !model.complete || !direct.remembered || model.projectAuthorized;
+  byId('removeProject').disabled = model.busy || !model.project;
+  byId('commandButtons').textContent = model.commandButtons ? t.disableCommandButtons : t.enableCommandButtons;
+  byId('commandButtonsState').textContent = direct.buttonsUnavailable ? t.buttonsUnavailable : '';
   const active = ['connected', 'connecting', 'reconnecting'].includes(direct.status);
   byId('connectionState').textContent = t[direct.status] || t.unknown;
-  byId('pairState').textContent = direct.paired ? t.paired : t.identityMissing;
+  byId('pairState').textContent = direct.paired ? t.paired : direct.remembered ? t.pairRemembered : t.identityMissing;
   byId('connectionState').classList.toggle('done', direct.status === 'connected');
   byId('pairState').classList.toggle('done', Boolean(direct.paired));
   byId('connect').disabled = model.busy || active || !model.ready.bot || !model.ready.project;
   byId('disconnect').disabled = !active && !model.busy;
   byId('pair').disabled = model.busy || direct.status !== 'connected' || direct.busy;
-  byId('cancel').disabled = model.busy || !direct.busy;
+  byId('trustIdentity').hidden = Boolean(direct.remembered) || !model.ready.identity;
+  byId('trustIdentity').disabled = model.busy || direct.busy || !model.complete;
+  byId('forgetPairing').hidden = !direct.remembered;
+  byId('forgetPairing').disabled = model.busy || !direct.remembered;
+  byId('conversationState').textContent = direct.conversation ? t.conversationSelected + ': ' + direct.conversation : t.noConversationSelected;
+  byId('selectConversation').disabled = model.busy || !direct.paired || direct.busy || !model.sync?.enabled;
+  byId('viewHistory').disabled = model.busy || !direct.paired || direct.busy || !direct.hasThread || !model.sync?.enabled;
+  byId('nextHistory').disabled = model.busy || !direct.paired || direct.busy || !model.hasMoreHistory || !model.sync?.enabled;
+  byId('cancel').disabled = !direct.busy;
   byId('showResult').disabled = model.busy || !direct.hasResult;
   byId('openThread').disabled = model.busy || !direct.hasThread || !model.sync?.enabled;
-  byId('enableSync').disabled = model.busy || Boolean(model.sync?.enabled);
+  byId('enableSync').disabled = model.busy;
+  byId('enableSync').textContent = model.sync?.enabled ? t.refreshSync : t.enableSync;
   byId('disableSync').disabled = model.busy || !model.sync?.enabled;
   byId('disableSync').hidden = !model.sync?.enabled;
   byId('syncState').textContent = model.sync?.ready ? t.syncReady : model.sync?.enabled ? t.syncConfigured : t.syncDisabled;
   byId('pair').textContent = t.pair;
-  byId('pair').hidden = Boolean(direct.pairingCode || direct.paired);
+  byId('pair').hidden = Boolean(direct.remembered || direct.pairingCode || direct.paired);
   byId('pairBox').hidden = !direct.pairingCode;
   byId('pairingCode').textContent = direct.pairingCode ? '/pair ' + direct.pairingCode : '';
   byId('taskState').textContent = direct.task ? t.phoneStatus + direct.task.id + ' · ' + (t[direct.task.status] || t.unknown)
@@ -68,7 +66,6 @@ function update(model) {
     : direct.task?.status === 'unknown' ? t.taskUnknownNote : '';
   byId('deliveryState').textContent = direct.deliveryFailed ? t.deliveryFailed : '';
   byId('sandboxState').textContent = direct.readOnly ? t.codexReadOnly : '';
-  byId('check').textContent = model.busy ? t.checking : t.check;
 }
 
 document.addEventListener('click', (event) => {

@@ -11,7 +11,8 @@ const { render } = require('./webview');
 
 const ACTIONS = new Set(['check', 'credentials', 'identity', 'selectProject', 'preview',
   'guide', 'identityGuide', 'installGuide', 'createBot', 'clear', 'chooseCodex',
-  'connect', 'disconnect', 'pair', 'cancel', 'showResult', 'enableSync', 'disableSync', 'openThread']);
+  'connect', 'disconnect', 'pair', 'trustIdentity', 'forgetPairing', 'selectConversation', 'viewHistory', 'nextHistory',
+  'authorizeProject', 'removeProject', 'commandButtons', 'cancel', 'showResult', 'enableSync', 'disableSync', 'openThread']);
 const LINKS = {
   createBot: 'https://q.qq.com/',
   installGuide: 'https://learn.chatgpt.com/docs/cli',
@@ -32,6 +33,7 @@ class SetupController {
     this.shared = options.shared || new SharedIntegration(vscode, context, this.t);
     this.direct = new DirectController(vscode, context, this.store, this.t, {
       createSession: spec => this.shared.createSession(spec),
+      commandButtons: () => vscode.workspace.getConfiguration('codexAnyDevice').get('commandButtons', false),
       ...options.direct, onChange: () => { void this.refresh().catch(() => {}); },
     });
     this.listeners = [];
@@ -67,7 +69,9 @@ class SetupController {
     const ready = readiness(state, await this.store.hasSecret());
     const completed = Object.values(ready).filter(Boolean).length;
     return { strings: this.t, language: this.vscode.env.language, ready, completed,
-      complete: completed === 3, project: state.project, environment: this.environment,
+      complete: completed === 3, project: state.project, projects: state.projects, projectAuthorized: state.authorizedProject === state.project?.path,
+      commandButtons: this.vscode.workspace.getConfiguration('codexAnyDevice').get('commandButtons', false),
+      hasMoreHistory: Boolean(this.direct.history?.next), environment: this.environment,
       direct: this.direct.snapshot(), sync: this.shared.snapshot(), busy: this.busy, notice: this.notice };
   }
 
@@ -86,18 +90,38 @@ class SetupController {
 
   async act(action) {
     if (action === 'disconnect') { await this.direct.disconnect(); await this.refresh(); return; }
+    if (action === 'cancel') {
+      try { await this.direct.cancel(); } catch { this.notice = this.t.storageFailed; }
+      await this.refresh(); return;
+    }
     if (this.busy || !ACTIONS.has(action)) return;
     if (!this.local()) return this.vscode.window.showInformationMessage(this.t.localOnly);
     this.busy = true;
     this.notice = '';
     try {
       await this.refresh();
-      if (['credentials', 'identity', 'selectProject', 'chooseCodex'].includes(action)) await this.direct.disconnect();
+      if (['credentials', 'identity', 'selectProject', 'chooseCodex', 'authorizeProject', 'removeProject'].includes(action)) await this.direct.disconnect();
       if (LINKS[action]) await this.vscode.env.openExternal(this.vscode.Uri.parse(LINKS[action]));
-      else if (action === 'check') await this.checkRuntime();
+      else if (action === 'check') {
+        await this.checkRuntime();
+        const codex = this.environment?.codex;
+        const document = await this.vscode.workspace.openTextDocument({ language: 'plaintext', content:
+          this.t.check + '\n\nCodex: ' + (!codex?.found ? this.t.missing : codex.version || this.t.unknown)
+          + '\n' + this.t.authLabel + ': ' + (!codex?.found ? this.t.missing : this.t[codex.login] || this.t.unknown)
+          + (codex?.detectedShim ? '\n' + this.t.shimHint : '') + '\n\n' + this.t.authNote });
+        await this.vscode.window.showTextDocument(document, { preview: true });
+      }
       else if (action === 'credentials') await this.credentials();
       else if (action === 'identity') await this.identity();
       else if (action === 'selectProject') await this.selectProject();
+      else if (action === 'authorizeProject') await this.authorizeProject();
+      else if (action === 'removeProject' && this.store.read().project) {
+        const state = this.store.read();
+        const choice = await this.vscode.window.showWarningMessage(this.t.removeProjectConfirm, { modal: true, detail: state.project.path }, this.t.removeProject);
+        if (choice === this.t.removeProject && this.local()) { await this.store.removeProject(state.project.path); await this.direct.resetProjectView(); }
+      }
+      else if (action === 'commandButtons') await this.vscode.workspace.getConfiguration('codexAnyDevice').update('commandButtons',
+        !this.vscode.workspace.getConfiguration('codexAnyDevice').get('commandButtons', false), this.vscode.ConfigurationTarget.Global);
       else if (action === 'preview') await this.preview();
       else if (action === 'guide') await this.openDocument('docs/setup.md');
       else if (action === 'identityGuide') await this.openDocument('docs/qq-identity.md');
@@ -109,8 +133,38 @@ class SetupController {
       }
       else if (action === 'enableSync') { await this.direct.disconnect(); await this.shared.enable(await this.resolveCodex(this.codexOptions())); }
       else if (action === 'disableSync') { await this.direct.disconnect(); await this.shared.disable(); }
-      else if (action === 'openThread' && this.direct.latestThread) await this.shared.openThread(this.direct.latestThread);
+      else if (action === 'openThread' && (this.direct.latestThread || this.store.read().conversationId)) await this.shared.openThread(this.direct.latestThread || this.store.read().conversationId);
       else if (action === 'pair') this.direct.pair();
+      else if (action === 'trustIdentity') {
+        const epoch = this.direct.epoch;
+        const state = await this.requireComplete();
+        const answer = await this.vscode.window.showWarningMessage(this.t.trustIdentityConfirm, { modal: true,
+          detail: this.t.trustIdentityDetail + '\n\n' + state.senderId + '\n\n' + state.project.path }, this.t.pairAllow);
+        if (answer === this.t.pairAllow) {
+          if (epoch !== this.direct.epoch || !this.local()) throw new Error('configurationChanged');
+          const disconnectedEpoch = epoch + 1;
+          await this.direct.disconnect();
+          await this.store.confirmSender(state.senderId, () => disconnectedEpoch === this.direct.epoch && this.local() && this.store.read().appId === state.appId
+            && this.store.read().senderId === state.senderId && this.store.read().project?.path === state.project.path);
+          this.notice = this.t.pairRemembered;
+        }
+      }
+      else if (action === 'forgetPairing') { await this.direct.forgetPairing(); this.notice = this.t.pairingForgotten; }
+      else if (action === 'selectConversation') {
+        const threads = await this.direct.listConversations();
+        if (!threads.length) this.notice = this.t.noConversations;
+        else {
+          const target = await this.vscode.window.showQuickPick(threads.map(thread => ({ label: thread.name,
+            description: thread.status === 'active' ? this.t.running : this.t.conversationIdle, thread })), { title: this.t.selectConversation });
+          if (target) await this.direct.selectConversation(target.thread.id);
+        }
+      }
+      else if (action === 'viewHistory' || action === 'nextHistory') {
+        const result = await this.direct.readHistory(undefined, action === 'nextHistory');
+        const document = await this.vscode.workspace.openTextDocument({ language: 'plaintext',
+          content: this.t.historyTitle + '\n\n' + (result.text || this.t.noHistory) + '\n\n' + (result.next ? this.t.historyMore : this.t.historyEnd) });
+        await this.vscode.window.showTextDocument(document, { preview: true });
+      }
       else if (action === 'cancel') await this.direct.cancel();
       else if (action === 'showResult' && this.direct.output) {
         const document = await this.vscode.workspace.openTextDocument({ language: 'plaintext', content: this.direct.output });
@@ -121,7 +175,8 @@ class SetupController {
         'codexUnsupported', 'connectionBusy', 'qqNotConnected', 'qqDenied', 'qqNetwork', 'qqProtocol',
         'qqEndpoint', 'qqEndpointTransport', 'qqEndpointHost', 'qqEndpointPath', 'qqEndpointOptions',
         'qqShards', 'qqRuntime', 'configurationChanged', 'storageFailed', 'syncPlatform', 'syncVersion', 'syncOverride',
-        'syncSetupFailed', 'syncUnavailable', 'syncChanged', 'syncBusy', 'syncNotReady'];
+        'syncSetupFailed', 'syncUnavailable', 'syncChanged', 'syncBusy', 'syncNotReady', 'syncRequired', 'threadBusy', 'threadMissing', 'threadProject', 'continueMissing',
+        'projectLimit', 'projectUnauthorized', 'historyEnd'];
       this.notice = allowed.includes(error.message) ? this.t[error.message] : this.t.operationFailed;
       await this.vscode.window.showErrorMessage(this.notice);
     } finally {
@@ -166,13 +221,36 @@ class SetupController {
 
   async selectProject() {
     const folders = (this.vscode.workspace.workspaceFolders || []).filter((folder) => folder.uri.scheme === 'file');
-    if (!folders.length) throw new Error('noProject');
-    const choices = folders.map((folder) => ({ label: folder.name, description: folder.uri.fsPath, folder }));
+    const saved = this.store.read().projects || [];
+    const choices = saved.map(project => ({ label: project.name, description: project.path, project }));
+    choices.push(...folders.filter(folder => !saved.some(project => project.path === folder.uri.fsPath))
+      .map(folder => ({ label: folder.name, description: folder.uri.fsPath, folder })));
+    choices.push({ label: this.t.browseProject, browse: true });
     const choice = await this.vscode.window.showQuickPick(choices, { title: this.t.selectProject });
     if (!choice) return;
-    const projectPath = await fs.realpath(choice.folder.uri.fsPath);
+    let selected = choice.project || (choice.folder && { name: choice.folder.name, path: choice.folder.uri.fsPath });
+    if (choice.browse) {
+      const result = await this.vscode.window.showOpenDialog({ title: this.t.browseProject, canSelectFiles: false, canSelectFolders: true, canSelectMany: false });
+      if (!result?.length || result[0].scheme !== 'file') return;
+      selected = { name: path.basename(result[0].fsPath), path: result[0].fsPath };
+    }
+    if (!selected || !this.local()) return;
+    const projectPath = await fs.realpath(selected.path);
     if (!(await fs.stat(projectPath)).isDirectory()) throw new Error('invalidProject');
-    await this.store.saveProject({ name: choice.folder.name, path: projectPath });
+    const previous = this.store.read().project?.path;
+    await this.store.saveProject({ name: selected.name, path: projectPath });
+    if (previous !== projectPath) await this.direct.resetProjectView();
+  }
+  async authorizeProject() {
+    const epoch = this.direct.epoch, state = await this.requireComplete();
+    if (!require('./setup-model').confirmed(state)) throw new Error('connectRequired');
+    const answer = await this.vscode.window.showWarningMessage(this.t.connectConfirm, { modal: true,
+      detail: this.t.pairIdentity + '\n' + state.senderId + '\n\n' + state.project.path + '\n\n' + this.t.connectDetail }, this.t.connectAllow);
+    if (answer !== this.t.connectAllow) return;
+    await this.requireComplete();
+    await this.store.authorizeProject(() => epoch === this.direct.epoch && this.local()
+      && this.store.read().appId === state.appId && this.store.read().senderId === state.senderId
+      && this.store.read().project?.path === state.project.path);
   }
 
   async requireComplete() {
