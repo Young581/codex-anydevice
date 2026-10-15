@@ -1,12 +1,19 @@
 # Changelog
 
+## 0.6.3 — 2026-10-15
+
+- 修复 GitHub tag 查询接口不返回未公开草稿时，下载和公开工具找不到已上传附件的问题；按准确 tag 在有界分页列表中查找，不新建重复草稿、不移动标签、不替换附件。
+- 0.6.2 的三平台 CI、注释 tag 和官方 vsce 草稿上传已通过；原 tag/附件保留。本版本补齐草稿读取回归，继续同包审计、隔离宿主验证与正式公开发布。
+
+Fixed draft release discovery so uploaded assets can be downloaded, verified and published without changing existing tags or assets.
+
 ## 0.6.2 — 2026-10-15
 
-- 首次正式 GitHub Release，汇总已完成的官方同步稳定性修复、记住 QQ 配对、原线程续聊、多项目切换、对话历史分页和精简管理面板。
+- GitHub 正式发布准备，汇总已完成的官方同步稳定性修复、记住 QQ 配对、原线程续聊、多项目切换、对话历史分页和精简管理面板。
 - 每轮完成的修改提交并推送；main 三平台 CI 通过后自动创建版本 tag，并使用固定官方 `@vscode/vsce` 4.0.0 打包、审计和上传 Release 草稿。下载同包完成隔离宿主验证后公开发布，不覆盖旧 tag 或资产。
 - 发布脚本核对精确提交、版本、源码载荷、上传/下载 SHA-256 与已审查哈希。GitHub Release 与 Marketplace 上架分别记录。
 
-First public GitHub release, with persistent pairing, same-thread continuation, project switching, paged history and a simpler management panel. Completed changes now follow a committed push, version tag and audited release workflow.
+Prepared GitHub distribution with persistent pairing, same-thread continuation, project switching, paged history and a simpler management panel. Completed changes now follow a committed push, version tag and audited release workflow.
 
 ## 0.6.1 — 2026-10-15
 

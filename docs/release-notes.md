@@ -1,4 +1,4 @@
-# Codex AnyDevice v0.6.2
+# Codex AnyDevice v0.6.3
 
 用手机 QQ 给电脑上的 Codex 发起任务、继续已有会话并查看对话记录。首次正式 GitHub Release，安装包在本页附件下载。
 

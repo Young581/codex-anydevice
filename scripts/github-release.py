@@ -57,6 +57,21 @@ def tag_commit(token, tag):
     return obj['sha']
 
 
+def find_release(token, tag):
+    release = github.request(token, BASE + '/releases/tags/' + tag)
+    if release:
+        return release
+    # GitHub's tag endpoint omits unpublished drafts, even for their owner.
+    for page in range(1, 11):
+        entries = github.request(token, BASE + '/releases?per_page=100&page=' + str(page))
+        match = next((entry for entry in entries if entry['tag_name'] == tag), None)
+        if match:
+            return match
+        if len(entries) < 100:
+            return None
+    raise ValueError('Release lookup exceeded the bounded page limit')
+
+
 def upload(token, release, name, data, mime):
     digest = 'sha256:' + hashlib.sha256(data).hexdigest()
     existing = next((asset for asset in github.request(token, BASE + '/releases/' + str(release['id']) + '/assets')
@@ -87,7 +102,7 @@ def prepare(token, archive, notes):
         annotated = github.request(token, BASE + '/git/tags', 'POST',
             {'tag': tag, 'message': 'Codex AnyDevice ' + tag, 'object': commit, 'type': 'commit'})
         github.request(token, BASE + '/git/refs', 'POST', {'ref': 'refs/tags/' + tag, 'sha': annotated['sha']})
-    release = github.request(token, BASE + '/releases/tags/' + tag)
+    release = find_release(token, tag)
     if not release:
         release = github.request(token, BASE + '/releases', 'POST', {'tag_name': tag, 'target_commitish': commit,
             'name': 'Codex AnyDevice ' + tag, 'body': notes.read_text('utf-8'), 'draft': True, 'prerelease': False})
@@ -140,7 +155,7 @@ def publish(token, expected):
     tag, commit = release_identity()
     if not re.fullmatch(r'[0-9a-f]{64}', expected or '') or tag_commit(token, tag) != commit:
         raise ValueError('Publishing requires the exact reviewed SHA-256 and matching tag')
-    release = github.request(token, BASE + '/releases/tags/' + tag)
+    release = find_release(token, tag)
     if not release:
         raise ValueError('Prepare and review the draft release first')
     names = {asset['name']: asset for asset in release['assets']}
@@ -169,7 +184,7 @@ def main():
     if args.prepare:
         result = prepare(token, args.prepare, args.notes)
     elif args.download:
-        release = github.request(token, BASE + '/releases/tags/' + release_identity()[0])
+        release = find_release(token, release_identity()[0])
         if not release:
             raise ValueError('Release not found')
         report = download_asset(token, release, args.download)

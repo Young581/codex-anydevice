@@ -1,6 +1,6 @@
 # 构建与发布
 
-用户已授权：每轮完成的修改都提交、推送到公开仓库 `Young581/codex-anydevice`，递增版本并发布 tag 和 GitHub Release，不再只留本地。当前版本 0.6.2，GitHub Release 与 VS Code Marketplace 上架分别记录。真实手机和模型验收未完成项如实写入说明，不再默认禁止 GitHub 分发。
+用户已授权：每轮完成的修改都提交、推送到公开仓库 `Young581/codex-anydevice`，递增版本并发布 tag 和 GitHub Release，不再只留本地。当前版本 0.6.3，GitHub Release 与 VS Code Marketplace 上架分别记录。真实手机和模型验收未完成项如实写入说明，不再默认禁止 GitHub 分发。
 
 ## 每轮交付
 
@@ -20,7 +20,7 @@ node --test tests/extension.test.js tests/setup.test.js tests/runtime.test.js te
 python -B tests/package_validation.py
 python -B tests/release_validation.py
 python -B build.py --output dist
-python -B packaging/release-audit.py dist/codex-anydevice-0.6.2.vsix
+python -B packaging/release-audit.py dist/codex-anydevice-0.6.3.vsix
 ```
 
 离线开发构建只读取审查白名单并固定 ZIP 时间戳；正式包使用上述官方 vsce，两者不能混同哈希。不包含本机状态、凭据、测试输出或 `.git`。最终包审计身份、清单、敏感内容和源码逐字节一致性。

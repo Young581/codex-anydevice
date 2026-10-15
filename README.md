@@ -4,7 +4,7 @@
 
 用手机 QQ 给电脑上的 Codex 发起新任务或继续已有会话，在 VS Code 中选择项目、确认配对和处理审批。面向个人用户，不依赖 OpenClaw。社区项目，非 OpenAI、腾讯或 Microsoft 官方产品。
 
-**当前 0.6.2 正式通过 GitHub Release 分发。** [下载安装包](https://github.com/Young581/codex-anydevice/releases/latest)。管理面板只展示配置、项目、连接和会话操作，排障入口移至命令面板，技术原理放在文档。支持多目录切换、历史分页和 QQ 指令提示/可选填入按钮；QQ 只需配对一次，每个目录分别记住续聊目标。机器人权限、手机实际收发、ChatGPT/API 真实任务仍需验收。尚未上架 VS Code Marketplace。
+**当前 0.6.3 正式通过 GitHub Release 分发。** [下载安装包](https://github.com/Young581/codex-anydevice/releases/latest)。管理面板只展示配置、项目、连接和会话操作，排障入口移至命令面板，技术原理放在文档。支持多目录切换、历史分页和 QQ 指令提示/可选填入按钮；QQ 只需配对一次，每个目录分别记住续聊目标。机器人权限、手机实际收发、ChatGPT/API 真实任务仍需验收。尚未上架 VS Code Marketplace。
 
 ## 开始使用
 

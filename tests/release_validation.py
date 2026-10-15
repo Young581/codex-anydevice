@@ -16,6 +16,24 @@ spec.loader.exec_module(builder)
 
 
 class ReleaseTests(unittest.TestCase):
+    def test_published_release_lookup_does_not_list_drafts(self):
+        entry = {'id': 1, 'tag_name': 'v0.6.3', 'draft': False}
+        with patch.object(release.github, 'request', return_value=entry) as network:
+            self.assertEqual(release.find_release('synthetic-token', 'v0.6.3'), entry)
+            self.assertEqual(network.call_count, 1)
+
+    def test_draft_lookup_falls_back_to_list_and_matches_exact_tag(self):
+        entry = {'id': 2, 'tag_name': 'v0.6.3', 'draft': True}
+        with patch.object(release.github, 'request', side_effect=[None, [
+            {'id': 1, 'tag_name': 'v0.6.2', 'draft': True}, entry]]):
+            self.assertEqual(release.find_release('synthetic-token', 'v0.6.3'), entry)
+
+    def test_draft_lookup_pages_and_missing_tag_remains_missing(self):
+        full_page = [{'tag_name': 'v0.0.' + str(i)} for i in range(100)]
+        with patch.object(release.github, 'request', side_effect=[None, full_page, []]) as network:
+            self.assertIsNone(release.find_release('synthetic-token', 'v0.6.3'))
+            self.assertTrue(network.call_args.args[1].endswith('page=2'))
+
     def test_archive_requires_exact_reviewed_source(self):
         with tempfile.TemporaryDirectory(prefix='anydevice-release-') as temporary:
             output = Path(temporary)

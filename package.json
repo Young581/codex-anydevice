@@ -2,7 +2,7 @@
   "name": "codex-anydevice",
   "displayName": "Codex AnyDevice",
   "description": "Start and continue personal Codex conversations through an official QQ bot, with remembered pairing and desktop approvals.",
-  "version": "0.6.2",
+  "version": "0.6.3",
   "publisher": "Young581",
   "license": "MIT",
   "preview": true,
